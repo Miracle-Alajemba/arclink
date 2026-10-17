@@ -1,23 +1,37 @@
 import { useState, useCallback } from 'react'
 import { isAddress } from 'viem'
+import logo from '@/assets/arclink-logo.svg'
 import { ConnectKitButton } from 'connectkit'
-import { Copy, Link2, QrCode, CheckCircle, Store, ChevronRight, Eye } from 'lucide-react'
+import {
+  Copy, Link2, QrCode, CheckCircle, Store, ChevronRight,
+  Eye, ArrowLeft, List, PlusCircle, Lock,
+} from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import QRCode from './QRCode'
+import PaymentRequests from './PaymentRequests'
 import type { ArcLinkParams } from '@/utils/links'
+import { generateTrackingRef, addRequest } from '@/utils/requests'
+
+const ARC_RPC = 'https://rpc.testnet.arc.io'
 
 interface PaymentLink {
   merchant: string
   merchantName: string
   amount: string
-  ref: string
+  /** Auto-generated public on-chain tracking ref */
+  trackingRef: string
+  /** Private label stored locally only */
+  privateLabel: string
   url: string
 }
 
 interface MerchantDashboardProps {
   onPreview: (params: ArcLinkParams) => void
+  onBack?: () => void
 }
+
+type Tab = 'create' | 'requests'
 
 const glass = {
   card: {
@@ -34,11 +48,31 @@ const glass = {
   } as React.CSSProperties,
 }
 
-export default function MerchantDashboard({ onPreview }: MerchantDashboardProps) {
+/** Fetch current block number from Arc Testnet (best-effort; returns null on error) */
+async function fetchCurrentBlock(): Promise<bigint | null> {
+  try {
+    const res = await fetch(ARC_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_blockNumber', params: [], id: 1 }),
+    })
+    const json = await res.json() as { result: string }
+    return BigInt(json.result)
+  } catch {
+    return null
+  }
+}
+
+export default function MerchantDashboard({ onPreview, onBack }: MerchantDashboardProps) {
+  const [tab, setTab] = useState<Tab>('create')
+
+  // Form state
   const [merchantName, setMerchantName] = useState('')
   const [payoutAddress, setPayoutAddress] = useState('')
   const [amount, setAmount] = useState('')
-  const [ref, setRef] = useState('')
+  const [privateLabel, setPrivateLabel] = useState('')
+
+  // Generated link state
   const [generatedLink, setGeneratedLink] = useState<PaymentLink | null>(null)
   const [showQR, setShowQR] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -49,25 +83,48 @@ export default function MerchantDashboard({ onPreview }: MerchantDashboardProps)
   const nameValid = merchantName.trim().length > 0
   const canGenerate = nameValid && addressValid && amountValid
 
-  const handleGenerate = useCallback(() => {
+  const handleGenerate = useCallback(async () => {
     if (!canGenerate) return
+
+    const trackingRef = generateTrackingRef()
     const base = window.location.origin
     const params = new URLSearchParams({
       merchant: payoutAddress.trim(),
       name: merchantName.trim(),
       amount: amountNum.toFixed(2),
+      ref: trackingRef,           // always include tracking ref in the link
     })
-    if (ref.trim()) params.set('ref', ref.trim())
     const url = `${base}/?${params.toString()}`
-    setGeneratedLink({
+
+    const link: PaymentLink = {
       merchant: payoutAddress.trim(),
       merchantName: merchantName.trim(),
       amount: amountNum.toFixed(2),
-      ref: ref.trim(),
+      trackingRef,
+      privateLabel: privateLabel.trim(),
       url,
-    })
+    }
+    setGeneratedLink(link)
     setShowQR(false)
-  }, [canGenerate, payoutAddress, merchantName, amountNum, ref])
+
+    // Capture block number (best-effort) then save to localStorage
+    const fromBlock = await fetchCurrentBlock()
+
+    addRequest({
+      id: `${trackingRef}-${Date.now()}`,
+      merchant: payoutAddress.trim(),
+      merchantName: merchantName.trim(),
+      amount: amountNum.toFixed(2),
+      trackingRef,
+      privateLabel: privateLabel.trim() || undefined,
+      url,
+      createdAt: new Date().toISOString(),
+      fromBlock,
+      status: 'Pending',
+    })
+
+    toast.success('Payment link created and saved to tracker')
+  }, [canGenerate, payoutAddress, merchantName, amountNum, privateLabel])
 
   const handleCopy = useCallback(() => {
     if (!generatedLink) return
@@ -81,231 +138,337 @@ export default function MerchantDashboard({ onPreview }: MerchantDashboardProps)
   return (
     <div className="min-h-dvh" style={{ background: 'var(--bg-gradient)' }}>
       <div className="mx-auto max-w-md px-4 py-8">
+
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="display text-2xl font-bold" style={{ color: 'var(--ink)', letterSpacing: '-0.02em' }}>
-              ArcLink
-            </h1>
-            <p className="mt-0.5 text-sm" style={{ color: 'var(--muted)' }}>
-              Create a USDC payment link
-            </p>
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="flex size-8 items-center justify-center rounded-xl transition-all hover:scale-[1.06] active:scale-[0.96]"
+                style={{ background: 'var(--surface-muted)', border: '1px solid var(--border)' }}
+                aria-label="Back to home"
+              >
+                <ArrowLeft className="size-4" style={{ color: 'var(--ink-2)' }} />
+              </button>
+            )}
+            <div className="flex flex-col gap-1">
+              <img src={logo} alt="ArcLink" className="h-9" style={{ width: 'auto' }} />
+              <p className="text-xs" style={{ color: 'var(--muted)', fontFamily: 'var(--font-main)' }}>
+                Merchant dashboard
+              </p>
+            </div>
           </div>
           <ConnectKitButton />
         </div>
 
-        {/* Form card */}
-        <div className="p-5" style={glass.card}>
-          <div className="mb-4 flex items-center gap-2">
-            <div
-              className="flex size-8 items-center justify-center rounded-xl"
-              style={{ background: 'rgba(18,45,69,0.08)' }}
-            >
-              <Store className="size-4" style={{ color: 'var(--accent)' }} />
-            </div>
-            <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
-              Link details
-            </span>
-          </div>
-
-          <div className="space-y-3">
-            {/* Business name */}
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
-                Business name
-              </label>
-              <input
-                type="text"
-                value={merchantName}
-                onChange={(e) => setMerchantName(e.target.value)}
-                placeholder="Acme Coffee Co."
-                className="w-full rounded-xl px-4 py-3 text-sm font-medium outline-none transition-all"
-                style={{
-                  background: 'var(--surface-muted)',
-                  border: `1px solid ${merchantName && !nameValid ? 'var(--danger)' : 'var(--border)'}`,
-                  color: 'var(--ink)',
-                  fontFamily: "'DM Sans', sans-serif",
-                }}
-              />
-            </div>
-
-            {/* Payout address */}
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
-                Payout address
-              </label>
-              <input
-                type="text"
-                value={payoutAddress}
-                onChange={(e) => setPayoutAddress(e.target.value)}
-                placeholder="0x..."
-                className="mono w-full rounded-xl px-4 py-3 text-sm outline-none transition-all"
-                style={{
-                  background: 'var(--surface-muted)',
-                  border: `1px solid ${payoutAddress && !addressValid ? 'var(--danger)' : 'var(--border)'}`,
-                  color: 'var(--ink)',
-                }}
-              />
-              {payoutAddress && !addressValid && (
-                <p className="mt-1 text-xs" style={{ color: 'var(--danger)' }}>
-                  Invalid Ethereum address
-                </p>
-              )}
-            </div>
-
-            {/* Amount */}
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
-                Amount
-              </label>
-              <div className="relative">
-                <input
-                  inputMode="decimal"
-                  type="text"
-                  value={amount}
-                  onChange={(e) => {
-                    const v = e.target.value.replace(/[^0-9.]/g, '')
-                    if (v === '' || /^\d*\.?\d*$/.test(v)) setAmount(v)
-                  }}
-                  placeholder="0.00"
-                  className="display w-full rounded-xl py-3 pl-4 pr-20 text-2xl font-bold tabular-nums outline-none transition-all"
-                  style={{
-                    background: 'var(--surface-muted)',
-                    border: `1px solid ${amount && !amountValid ? 'var(--danger)' : 'var(--border)'}`,
-                    color: 'var(--ink)',
-                  }}
-                />
-                <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center gap-1.5">
-                  <TokenUSDC variant="branded" size={18} />
-                  <span className="text-sm font-semibold" style={{ color: 'var(--muted)' }}>USDC</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Reference (optional) */}
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
-                Reference{' '}
-                <span className="normal-case font-normal" style={{ color: 'var(--subtle)' }}>
-                  (optional)
-                </span>
-              </label>
-              <input
-                type="text"
-                value={ref}
-                onChange={(e) => setRef(e.target.value)}
-                placeholder="Invoice #123, Table 5, order ID..."
-                maxLength={80}
-                className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all"
-                style={{
-                  background: 'var(--surface-muted)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--ink)',
-                  fontFamily: "'DM Sans', sans-serif",
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Generate button */}
+        {/* Tab bar */}
+        <div
+          className="mb-5 flex rounded-2xl p-1 gap-1"
+          style={{ background: 'var(--surface-muted)', border: '1px solid var(--border)' }}
+        >
           <button
-            onClick={handleGenerate}
-            disabled={!canGenerate}
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold text-white transition-all hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ background: 'var(--accent)' }}
+            onClick={() => setTab('create')}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-semibold transition-all"
+            style={{
+              background: tab === 'create' ? 'var(--surface-strong)' : 'transparent',
+              color: tab === 'create' ? 'var(--ink)' : 'var(--muted)',
+              border: tab === 'create' ? '1px solid var(--border)' : '1px solid transparent',
+              boxShadow: tab === 'create' ? '0 1px 4px rgba(41,35,59,0.08)' : 'none',
+            }}
           >
-            <Link2 className="size-4" />
-            Generate payment link
-            <ChevronRight className="size-4" />
+            <PlusCircle className="size-3.5" />
+            Create link
+          </button>
+          <button
+            onClick={() => setTab('requests')}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-semibold transition-all"
+            style={{
+              background: tab === 'requests' ? 'var(--surface-strong)' : 'transparent',
+              color: tab === 'requests' ? 'var(--ink)' : 'var(--muted)',
+              border: tab === 'requests' ? '1px solid var(--border)' : '1px solid transparent',
+              boxShadow: tab === 'requests' ? '0 1px 4px rgba(41,35,59,0.08)' : 'none',
+            }}
+          >
+            <List className="size-3.5" />
+            Requests
+            {/* Show pending badge if address is entered */}
+            {addressValid && (() => {
+              try {
+                const key = `arclink:requests:${payoutAddress.toLowerCase()}`
+                const raw = localStorage.getItem(key)
+                if (!raw) return null
+                const items = JSON.parse(raw) as Array<{ status: string }>
+                const pending = items.filter(r => r.status === 'Pending').length
+                if (pending === 0) return null
+                return (
+                  <span
+                    className="ml-1 inline-flex items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white"
+                    style={{ background: 'var(--jelly, #6B5CA5)', minWidth: 16, height: 16 }}
+                  >
+                    {pending}
+                  </span>
+                )
+              } catch { return null }
+            })()}
           </button>
         </div>
 
-        {/* Generated link card */}
-        {generatedLink && (
-          <div className="mt-4 p-5" style={glass.card}>
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="size-5" style={{ color: 'var(--success)' }} />
+        {/* ── Create tab ─────────────────────────────────────────────── */}
+        {tab === 'create' && (
+          <>
+            <div className="p-5" style={glass.card}>
+              <div className="mb-4 flex items-center gap-2">
+                <div
+                  className="flex size-8 items-center justify-center rounded-xl"
+                  style={{ background: 'rgba(18,45,69,0.08)' }}
+                >
+                  <Store className="size-4" style={{ color: 'var(--accent)' }} />
+                </div>
                 <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
-                  Link ready
+                  Link details
                 </span>
               </div>
-              <button
-                onClick={() => setShowQR(!showQR)}
-                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all hover:scale-[1.02]"
-                style={{ background: 'var(--surface-muted)', color: 'var(--ink-2)', border: '1px solid var(--border)' }}
-              >
-                <QrCode className="size-3.5" />
-                {showQR ? 'Hide QR' : 'Show QR'}
-              </button>
-            </div>
 
-            {/* Summary row */}
-            <div className="mb-3 rounded-2xl p-4" style={glass.inner}>
-              <div className="flex items-center justify-between">
+              <div className="space-y-3">
+                {/* Business name */}
                 <div>
-                  <p className="font-semibold" style={{ color: 'var(--ink)' }}>{generatedLink.merchantName}</p>
-                  {generatedLink.ref && (
-                    <p className="mt-0.5 text-xs" style={{ color: 'var(--muted)' }}>{generatedLink.ref}</p>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
+                    Business name
+                  </label>
+                  <input
+                    type="text"
+                    value={merchantName}
+                    onChange={(e) => setMerchantName(e.target.value)}
+                    placeholder="Acme Coffee Co."
+                    className="w-full rounded-xl px-4 py-3 text-sm font-medium outline-none transition-all"
+                    style={{
+                      background: 'var(--surface-muted)',
+                      border: `1px solid ${merchantName && !nameValid ? 'var(--danger)' : 'var(--border)'}`,
+                      color: 'var(--ink)',
+                      fontFamily: 'var(--font-main)',
+                    }}
+                  />
+                </div>
+
+                {/* Payout address */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
+                    Payout address
+                  </label>
+                  <input
+                    type="text"
+                    value={payoutAddress}
+                    onChange={(e) => setPayoutAddress(e.target.value)}
+                    placeholder="0x..."
+                    className="mono w-full rounded-xl px-4 py-3 text-sm outline-none transition-all"
+                    style={{
+                      background: 'var(--surface-muted)',
+                      border: `1px solid ${payoutAddress && !addressValid ? 'var(--danger)' : 'var(--border)'}`,
+                      color: 'var(--ink)',
+                    }}
+                  />
+                  {payoutAddress && !addressValid && (
+                    <p className="mt-1 text-xs" style={{ color: 'var(--danger)' }}>
+                      Invalid Ethereum address
+                    </p>
                   )}
                 </div>
-                <div className="text-right">
-                  <p className="display text-xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
-                    {generatedLink.amount}
-                  </p>
-                  <p className="text-xs font-medium" style={{ color: 'var(--muted)' }}>USDC</p>
+
+                {/* Amount */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
+                    Amount
+                  </label>
+                  <div className="relative">
+                    <input
+                      inputMode="decimal"
+                      type="text"
+                      value={amount}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/[^0-9.]/g, '')
+                        if (v === '' || /^\d*\.?\d*$/.test(v)) setAmount(v)
+                      }}
+                      placeholder="0.00"
+                      className="amount-display w-full rounded-xl py-3 pl-4 pr-20 text-2xl outline-none transition-all"
+                      style={{
+                        background: 'var(--surface-muted)',
+                        border: `1px solid ${amount && !amountValid ? 'var(--danger)' : 'var(--border)'}`,
+                        color: 'var(--ink)',
+                      }}
+                    />
+                    <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center gap-1.5">
+                      <TokenUSDC variant="branded" size={18} />
+                      <span className="text-sm font-semibold" style={{ color: 'var(--muted)' }}>USDC</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Private label (local only) */}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
+                    Private label{' '}
+                    <span className="normal-case font-normal" style={{ color: 'var(--subtle)' }}>(optional, local only)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={privateLabel}
+                    onChange={(e) => setPrivateLabel(e.target.value)}
+                    placeholder="Invoice #123, Table 5, order ID…"
+                    maxLength={120}
+                    className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all"
+                    style={{
+                      background: 'var(--surface-muted)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--ink)',
+                      fontFamily: 'var(--font-main)',
+                    }}
+                  />
+                  {/* Privacy notice */}
+                  <div className="mt-1.5 flex items-start gap-1.5">
+                    <Lock className="size-3 mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
+                    <p className="text-[11px]" style={{ color: 'var(--subtle)' }}>
+                      Stored in this browser only. Never sent on-chain.
+                      The auto-generated tracking ref (ARCL-…) is public on-chain — do not put customer names or sensitive information there.
+                    </p>
+                  </div>
                 </div>
               </div>
-              <p className="mono mt-3 truncate text-xs" style={{ color: 'var(--subtle)' }}>
-                {generatedLink.merchant}
-              </p>
-            </div>
 
-            {/* QR code */}
-            {showQR && (
-              <div className="mb-3 flex justify-center rounded-2xl p-6" style={glass.inner}>
-                <QRCode value={generatedLink.url} size={200} />
-              </div>
-            )}
-
-            {/* URL display + copy */}
-            <div
-              className="flex items-center gap-2 rounded-xl px-3 py-2.5"
-              style={{ background: 'var(--surface-muted)', border: '1px solid var(--border)' }}
-            >
-              <p className="mono flex-1 truncate text-xs" style={{ color: 'var(--subtle)' }}>
-                {generatedLink.url}
-              </p>
+              {/* Generate button */}
               <button
-                onClick={handleCopy}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all hover:scale-[1.03] active:scale-[0.98]"
-                style={{ background: 'var(--accent)', color: 'white' }}
+                onClick={() => void handleGenerate()}
+                disabled={!canGenerate}
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold text-white transition-all hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
+                style={{ background: 'var(--accent)' }}
               >
-                {copied ? <CheckCircle className="size-3.5" /> : <Copy className="size-3.5" />}
-                {copied ? 'Copied!' : 'Copy'}
+                <Link2 className="size-4" />
+                Generate payment link
+                <ChevronRight className="size-4" />
               </button>
             </div>
 
-            {/* Preview checkout button */}
-            <button
-              onClick={() => onPreview({
-                merchant: generatedLink.merchant,
-                merchantName: generatedLink.merchantName,
-                amount: generatedLink.amount,
-                ref: generatedLink.ref || undefined,
-              })}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold transition-all hover:scale-[1.01] active:scale-[0.99]"
-              style={{ background: 'var(--surface-muted)', color: 'var(--ink-2)', border: '1px solid var(--border)' }}
-            >
-              <Eye className="size-4" />
-              Preview checkout
-            </button>
+            {/* Generated link card */}
+            {generatedLink && (
+              <div className="mt-4 p-5" style={glass.card}>
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="size-5" style={{ color: 'var(--success)' }} />
+                    <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                      Link ready
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setShowQR(!showQR)}
+                    className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all hover:scale-[1.02]"
+                    style={{ background: 'var(--surface-muted)', color: 'var(--ink-2)', border: '1px solid var(--border)' }}
+                  >
+                    <QrCode className="size-3.5" />
+                    {showQR ? 'Hide QR' : 'Show QR'}
+                  </button>
+                </div>
 
-            <p className="mt-3 text-center text-xs" style={{ color: 'var(--subtle)' }}>
-              Share this link with your customer. They open it, connect a wallet, approve USDC, and pay.
-            </p>
-          </div>
+                {/* Summary row */}
+                <div className="mb-3 rounded-2xl p-4" style={glass.inner}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold" style={{ color: 'var(--ink)' }}>{generatedLink.merchantName}</p>
+                      <p className="mono mt-0.5 text-xs" style={{ color: 'var(--subtle)' }}>
+                        {generatedLink.trackingRef}
+                      </p>
+                      {generatedLink.privateLabel && (
+                        <p className="mt-0.5 text-xs" style={{ color: 'var(--muted)' }}>
+                          {generatedLink.privateLabel}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="amount-display text-2xl" style={{ color: 'var(--ink)' }}>
+                        {generatedLink.amount}
+                      </p>
+                      <p className="text-xs font-medium" style={{ color: 'var(--muted)', fontFamily: 'var(--font-main)' }}>USDC</p>
+                    </div>
+                  </div>
+                  <p className="mono mt-3 truncate text-xs" style={{ color: 'var(--subtle)' }}>
+                    {generatedLink.merchant}
+                  </p>
+                </div>
+
+                {/* QR code */}
+                {showQR && (
+                  <div className="mb-3 flex justify-center rounded-2xl p-6" style={glass.inner}>
+                    <QRCode value={generatedLink.url} size={200} />
+                  </div>
+                )}
+
+                {/* URL display + copy */}
+                <div
+                  className="flex items-center gap-2 rounded-xl px-3 py-2.5"
+                  style={{ background: 'var(--surface-muted)', border: '1px solid var(--border)' }}
+                >
+                  <p className="mono flex-1 truncate text-xs" style={{ color: 'var(--subtle)' }}>
+                    {generatedLink.url}
+                  </p>
+                  <button
+                    onClick={handleCopy}
+                    className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all hover:scale-[1.03] active:scale-[0.98]"
+                    style={{ background: 'var(--accent)', color: 'white' }}
+                  >
+                    {copied ? <CheckCircle className="size-3.5" /> : <Copy className="size-3.5" />}
+                    {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+
+                {/* Preview checkout */}
+                <button
+                  onClick={() => onPreview({
+                    merchant: generatedLink.merchant,
+                    merchantName: generatedLink.merchantName,
+                    amount: generatedLink.amount,
+                    ref: generatedLink.trackingRef,
+                  })}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold transition-all hover:scale-[1.01] active:scale-[0.99]"
+                  style={{ background: 'var(--surface-muted)', color: 'var(--ink-2)', border: '1px solid var(--border)' }}
+                >
+                  <Eye className="size-4" />
+                  Preview checkout
+                </button>
+
+                {/* View in requests tab */}
+                <button
+                  onClick={() => setTab('requests')}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl py-2.5 text-xs font-semibold transition-all hover:scale-[1.01] active:scale-[0.99]"
+                  style={{ background: 'transparent', color: 'var(--focus)', border: '1px solid var(--border)' }}
+                >
+                  <List className="size-3.5" />
+                  View in Payment requests
+                </button>
+
+                <p className="mt-3 text-center text-xs" style={{ color: 'var(--subtle)' }}>
+                  Share this link with your customer. They open it, connect a wallet, approve USDC, and pay.
+                </p>
+              </div>
+            )}
+          </>
         )}
+
+        {/* ── Requests tab ───────────────────────────────────────────── */}
+        {tab === 'requests' && (
+          <>
+            {!addressValid ? (
+              <div className="p-5 text-center" style={glass.card}>
+                <Store className="size-8 mx-auto mb-3" style={{ color: 'var(--subtle)' }} />
+                <p className="text-sm font-semibold mb-1" style={{ color: 'var(--ink)' }}>Enter your payout address first</p>
+                <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                  Switch to the "Create link" tab and fill in your payout address to view requests scoped to that address.
+                </p>
+              </div>
+            ) : (
+              <PaymentRequests merchant={payoutAddress.trim()} />
+            )}
+          </>
+        )}
+
       </div>
     </div>
   )
