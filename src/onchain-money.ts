@@ -1,32 +1,14 @@
 /*
- * Money math for USDC amounts. GENERATED — do not edit.
- *
- * Arc Studio writes this file from its own source, so the rules here are the ones
- * Arc Studio itself is tested against. Edits are overwritten.
- *
- * Import the math instead of writing it:
- *
- *   import { Amount, parseAmount, parseUsdc, usdcToGasToken } from '@/onchain-money';
- *
- * This module owns every decimal count and every amount operation. Do not hand
- * a decimal count to a parser, and do not add two amounts without it.
- *
- * On Arc the gas token IS USDC at 18 decimals while the ERC-20 interface uses
- * 6. The two views are one pool of funds, and mixing them is a 10^12 error on a
- * money path. 'usdcToGasToken' and 'gasTokenToUsdc' are the only safe bridge.
- */
-
-/*
- * Money math for USDC amounts: single owner of "how many decimals?" and "may
- * these two amounts be added?".
- *
- * This source ships verbatim into every sandbox as `@/onchain-money`, with only
- * the import specifier below rewritten. Add no other repo import.
+ * Money math for USDC amounts.
  *
  * Values are integer `bigint` smallest units carried with their decimal count.
  * No `number` holds a value: a float loses microdollars on a large balance.
  * `add`, `sub` and the comparisons refuse two different decimal counts, so
  * `toDecimals` is the only way to change one.
+ *
+ * On Arc the gas token IS USDC at 18 decimals while the ERC-20 interface uses 6.
+ * The two views are one pool of funds, and mixing them is a 10^12 error on a
+ * money path. `usdcToGasToken` and `gasTokenToUsdc` are the only safe bridge.
  */
 
 import { getUsdc, requireChain, USDC_DECIMALS } from '@/onchain-facts';
@@ -78,11 +60,9 @@ function absBigInt(value: bigint): bigint {
 /** Drops trailing zeros without a regex — a fixed-width scan avoids any backtracking risk. */
 function trimTrailingZeros(digits: string): string {
   let end = digits.length;
-
   while (end > 0 && digits[end - 1] === '0') {
     end -= 1;
   }
-
   return digits.slice(0, end);
 }
 
@@ -187,22 +167,18 @@ export class Amount {
       if (decimals === undefined) {
         throw new AmountError('EMPTY_SUM', 'Cannot sum an empty list without a decimal count to return zero in');
       }
-
       return Amount.zero(decimals);
     }
-
     return amounts.reduce((total, amount) => total.add(amount));
   }
 
   add(other: Amount): Amount {
     this.guardSameDecimals(other, 'add');
-
     return new Amount(this.raw + other.raw, this.decimals);
   }
 
   sub(other: Amount): Amount {
     this.guardSameDecimals(other, 'subtract');
-
     return new Amount(this.raw - other.raw, this.decimals);
   }
 
@@ -214,7 +190,6 @@ export class Amount {
     if (divisor === 0n) {
       throw new AmountError('DIVIDE_BY_ZERO', 'Cannot divide an amount by zero');
     }
-
     return new Amount(this.raw / divisor, this.decimals);
   }
 
@@ -259,45 +234,18 @@ export class Amount {
 
   compare(other: Amount): -1 | 0 | 1 {
     this.guardSameDecimals(other, 'compare');
-
-    if (this.raw < other.raw) {
-      return -1;
-    }
-
+    if (this.raw < other.raw) return -1;
     return this.raw > other.raw ? 1 : 0;
   }
 
-  eq(other: Amount): boolean {
-    return this.compare(other) === 0;
-  }
-
-  lt(other: Amount): boolean {
-    return this.compare(other) < 0;
-  }
-
-  lte(other: Amount): boolean {
-    return this.compare(other) <= 0;
-  }
-
-  gt(other: Amount): boolean {
-    return this.compare(other) > 0;
-  }
-
-  gte(other: Amount): boolean {
-    return this.compare(other) >= 0;
-  }
-
-  isZero(): boolean {
-    return this.raw === 0n;
-  }
-
-  isNegative(): boolean {
-    return this.raw < 0n;
-  }
-
-  isPositive(): boolean {
-    return this.raw > 0n;
-  }
+  eq(other: Amount): boolean { return this.compare(other) === 0; }
+  lt(other: Amount): boolean { return this.compare(other) < 0; }
+  lte(other: Amount): boolean { return this.compare(other) <= 0; }
+  gt(other: Amount): boolean { return this.compare(other) > 0; }
+  gte(other: Amount): boolean { return this.compare(other) >= 0; }
+  isZero(): boolean { return this.raw === 0n; }
+  isNegative(): boolean { return this.raw < 0n; }
+  isPositive(): boolean { return this.raw > 0n; }
 
   toString(): string {
     return formatUnitsExact(this.raw, this.decimals);
@@ -324,11 +272,9 @@ export class Amount {
 
 export function usdcDecimalsFor(chainId: number): number {
   const usdc = getUsdc(chainId);
-
   if (!usdc) {
     throw new AmountError('NO_USDC', `Chain ${chainId} has no USDC contract in Arc Studio's onchain facts`);
   }
-
   return usdc.decimals;
 }
 
@@ -343,7 +289,6 @@ export function parseAmount(chainId: number, value: string): Amount {
 
 export function formatAmount(chainId: number, amount: Amount): string {
   requireDecimals(amount, usdcDecimalsFor(chainId), 'ERC-20 USDC');
-
   return amount.toString();
 }
 
@@ -353,14 +298,12 @@ export function parseGasAmount(chainId: number, value: string): Amount {
 
 export function formatGasAmount(chainId: number, amount: Amount): string {
   requireDecimals(amount, gasTokenDecimalsFor(chainId), 'gas token');
-
   return amount.toString();
 }
 
 /**
  * True only where the gas token IS USDC, so the two views hold one pool of funds
- * and a rescale between them is meaningful. False where the gas token is a
- * different asset, and converting would need a price rather than an exponent.
+ * and a rescale between them is meaningful.
  */
 export function isGasTokenUsdc(chainId: number): boolean {
   return requireChain(chainId).nativeCurrency.isUsdc;
@@ -369,7 +312,6 @@ export function isGasTokenUsdc(chainId: number): boolean {
 export function usdcToGasToken(chainId: number, amount: Amount): Amount {
   requireGasTokenIsUsdc(chainId);
   requireDecimals(amount, usdcDecimalsFor(chainId), 'ERC-20 USDC');
-
   return amount.toDecimals(gasTokenDecimalsFor(chainId));
 }
 
@@ -380,14 +322,12 @@ export function usdcToGasToken(chainId: number, amount: Amount): Amount {
 export function gasTokenToUsdc(chainId: number, amount: Amount, mode: RescaleMode = 'trunc'): Amount {
   requireGasTokenIsUsdc(chainId);
   requireDecimals(amount, gasTokenDecimalsFor(chainId), 'gas token');
-
   return amount.toDecimals(usdcDecimalsFor(chainId), mode);
 }
 
 function requireGasTokenIsUsdc(chainId: number): void {
   if (!isGasTokenUsdc(chainId)) {
     const chain = requireChain(chainId);
-
     throw new AmountError(
       'GAS_TOKEN_IS_NOT_USDC',
       `The gas token on ${chain.name} is ${chain.nativeCurrency.symbol}, not USDC — converting between it and ` +

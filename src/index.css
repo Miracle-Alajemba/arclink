@@ -3,22 +3,54 @@
 @tailwind utilities;
 
 :root {
-  --bg: #ffffff;
-  --bg-gradient: linear-gradient(180deg, #f9f9fc 0%, #fffcf7 52%, #fbf7f2 100%);
-  --surface: rgba(255, 255, 255, 0.72);
-  --surface-strong: rgba(255, 255, 255, 0.90);
-  --surface-muted: #f5f5f8;
-  --ink: #122d45;
-  --ink-2: #334155;
-  --muted: #6b6580;
-  --subtle: #8a849c;
-  --border: rgba(18, 45, 69, 0.12);
-  --border-strong: rgba(25, 53, 77, 0.50);
-  --accent: #122d45;
-  --accent-hover: #1061a6;
-  --focus: #85b1ed;
-  --success: #1a8047;
-  --danger: #ba2b4c;
+  /* ── ArcLink brand palette ───────────────────────────────────────── */
+  --licorice:      #29233B;
+  --periwinkle:    #EDF1FC;
+  --jelly:         #6B5CA5;
+  --jelly-light:   #7C6FC4;
+  --gumdrop:       #4A9FE8;
+  --gumdrop-light: #5BA8EC;
+
+  /* ── Semantic surface tokens ─────────────────────────────────────── */
+  --bg-main:        var(--periwinkle);
+  --bg-card:        #FFFFFF;
+  --bg-card-subtle: #F5F7FE;
+  --border-subtle:  #D4DAF0;
+
+  /* ── Semantic text tokens ────────────────────────────────────────── */
+  --text-primary:   var(--licorice);
+  --text-secondary: #5A5374;
+  --text-muted:     #8E89A5;
+
+  /* ── Signal colors ───────────────────────────────────────────────── */
+  --signal-success: #1FD286;
+  --amber-reserve:  #DCA842;
+  --error:          #E53E3E;
+
+  /* ── Legacy variable aliases (keep existing component styles working) */
+  --bg:             var(--bg-main);
+  --bg-gradient:    linear-gradient(180deg, #EDF1FC 0%, #F5F7FE 58%, #FFFFFF 100%);
+  --surface:        rgba(255, 255, 255, 0.92);
+  --surface-strong: var(--bg-card);
+  --surface-muted:  var(--bg-card-subtle);
+  --ink:            var(--text-primary);
+  --ink-2:          var(--text-secondary);
+  --muted:          var(--text-secondary);
+  --subtle:         var(--text-muted);
+  --border:         var(--border-subtle);
+  --border-strong:  var(--jelly);
+  --accent:         var(--licorice);
+  --accent-hover:   var(--jelly-light);
+  --focus:          var(--gumdrop);
+  --success:        var(--signal-success);
+  --danger:         var(--error);
+}
+
+/* ── Font family tokens ───────────────────────────────────────────── */
+:root {
+  --font-serif: 'Instrument Serif', Georgia, serif;
+  --font-main:  'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono:  'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
 }
 
 * {
@@ -27,21 +59,32 @@
 
 body {
   margin: 0;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-main);
   min-height: 100dvh;
   background: var(--bg-gradient);
 }
 
+/* Editorial serif — headlines, amounts, brand wordmark */
 .display {
-  font-family: 'Space Grotesk', sans-serif;
-  letter-spacing: -0.03em;
+  font-family: var(--font-serif);
+  letter-spacing: -0.02em;
 }
 
+/* Technical monospace — addresses, hashes, URLs */
 .mono {
-  font-family: 'JetBrains Mono', Menlo, monospace;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/* Large editorial currency amounts */
+.amount-display {
+  font-family: var(--font-serif);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 /* Sonner toast overrides */
 [data-sonner-toaster] {
-  font-family: 'DM Sans', sans-serif !important;
+  font-family: var(--font-main) !important;
 }

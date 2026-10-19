@@ -1,18 +1,18 @@
 import { useState } from 'react'
 import { parseArcLinkParams } from '@/utils/links'
+import LandingPage from '@/components/LandingPage'
 import MerchantDashboard from '@/components/MerchantDashboard'
 import CheckoutPage from '@/components/CheckoutPage'
-import type { Address } from 'viem'
+import { ARCLINK_ADDRESS } from '@/chain-config'
 import type { ArcLinkParams } from '@/utils/links'
 
-const ARCLINK_CONTRACT_ADDRESS = (
-  import.meta.env.VITE_ARCLINK_ADDRESS ?? '0x0000000000000000000000000000000000000000'
-) as Address
+type View = 'landing' | 'dashboard'
 
 export default function App() {
-  // Support both real URL params (shared link) and in-app preview navigation
+  const [view, setView] = useState<View>('landing')
   const [previewParams, setPreviewParams] = useState<ArcLinkParams | null>(null)
 
+  // Deep-link: URL params always take priority — open checkout directly
   const urlParams = parseArcLinkParams(window.location.search)
   const activeParams = urlParams ?? previewParams
 
@@ -20,15 +20,20 @@ export default function App() {
     return (
       <CheckoutPage
         params={activeParams}
-        arcLinkAddress={ARCLINK_CONTRACT_ADDRESS}
+        arcLinkAddress={ARCLINK_ADDRESS}
         onBack={previewParams ? () => setPreviewParams(null) : undefined}
       />
     )
   }
 
-  return (
-    <MerchantDashboard
-      onPreview={(params) => setPreviewParams(params)}
-    />
-  )
+  if (view === 'dashboard') {
+    return (
+      <MerchantDashboard
+        onPreview={(params) => setPreviewParams(params)}
+        onBack={() => setView('landing')}
+      />
+    )
+  }
+
+  return <LandingPage onCreateLink={() => setView('dashboard')} />
 }

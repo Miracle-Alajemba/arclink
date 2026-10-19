@@ -1,6 +1,7 @@
 import { CheckCircle, ExternalLink, Copy } from 'lucide-react'
 import { useState } from 'react'
 import type { Address } from 'viem'
+import logo from '@/assets/arclink-logo.svg'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 
@@ -56,9 +57,9 @@ export default function ReceiptPage({
     <div className="min-h-dvh" style={{ background: 'var(--bg-gradient)' }}>
       <div className="mx-auto max-w-md px-4 py-8">
         {/* Header */}
-        <h1 className="display mb-6 text-xl font-bold" style={{ color: 'var(--ink)', letterSpacing: '-0.02em' }}>
-          ArcLink
-        </h1>
+        <div className="mb-6">
+          <img src={logo} alt="ArcLink" className="h-9" style={{ width: 'auto' }} />
+        </div>
 
         {/* Success card */}
         <div className="p-5" style={glass.card}>
@@ -78,7 +79,7 @@ export default function ReceiptPage({
             >
               <CheckCircle className="size-8" style={{ color: 'var(--success)' }} />
             </div>
-            <h2 className="display text-xl font-bold" style={{ color: 'var(--ink)' }}>
+            <h2 className="display text-2xl" style={{ color: 'var(--ink)' }}>
               Payment sent
             </h2>
             <p className="text-sm text-center" style={{ color: 'var(--muted)' }}>
@@ -92,10 +93,10 @@ export default function ReceiptPage({
               Amount paid
             </p>
             <div className="flex items-baseline gap-2">
-              <span className="display text-4xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
+              <span className="amount-display text-4xl" style={{ color: 'var(--ink)' }}>
                 {amount}
               </span>
-              <span className="text-lg font-semibold" style={{ color: 'var(--subtle)' }}>USDC</span>
+              <span className="text-lg font-semibold" style={{ color: 'var(--subtle)', fontFamily: 'var(--font-main)' }}>USDC</span>
             </div>
             <div className="mt-2 flex items-center gap-1.5">
               <TokenUSDC variant="branded" size={16} />

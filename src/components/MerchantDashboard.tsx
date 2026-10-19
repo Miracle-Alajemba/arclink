@@ -13,7 +13,7 @@ import PaymentRequests from './PaymentRequests'
 import type { ArcLinkParams } from '@/utils/links'
 import { generateTrackingRef, addRequest } from '@/utils/requests'
 
-const ARC_RPC = 'https://rpc.testnet.arc.io'
+import { TARGET_RPC } from '@/chain-config'
 
 interface PaymentLink {
   merchant: string
@@ -48,10 +48,10 @@ const glass = {
   } as React.CSSProperties,
 }
 
-/** Fetch current block number from Arc Testnet (best-effort; returns null on error) */
+/** Fetch current block number from Arc Mainnet (best-effort; returns null on error) */
 async function fetchCurrentBlock(): Promise<bigint | null> {
   try {
-    const res = await fetch(ARC_RPC, {
+    const res = await fetch(TARGET_RPC, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_blockNumber', params: [], id: 1 }),

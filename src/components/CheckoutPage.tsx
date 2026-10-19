@@ -8,13 +8,20 @@ import {
   useSwitchChain,
 } from 'wagmi'
 import { ConnectKitButton } from 'connectkit'
-import { ShieldCheck, AlertTriangle, Loader2, ArrowRight, Store, ArrowLeft } from 'lucide-react'
+import { ShieldCheck, AlertTriangle, Loader2, ArrowRight, Store, ArrowLeft, Clock } from 'lucide-react'
+import logo from '@/assets/arclink-logo.svg'
 import { TokenUSDC } from '@web3icons/react'
-import { getUsdc, requireChain, buildTxExplorerUrl } from '@/onchain-facts'
-import { parseAmount, usdcDecimalsFor, Amount } from '@/onchain-money'
 import { parseOnchainError } from '@/utils/errors'
 import type { ArcLinkParams } from '@/utils/links'
 import ReceiptPage from './ReceiptPage'
+import {
+  TARGET_CHAIN_ID,
+  TARGET_USDC_ADDRESS,
+  TARGET_NETWORK_LABEL,
+  CONTRACT_PENDING,
+  buildTxUrl,
+} from '@/chain-config'
+import { parseAmount, usdcDecimalsFor, Amount } from '@/onchain-money'
 
 // ArcLink contract ABI (only what the checkout needs)
 const ARCLINK_ABI = [
@@ -31,8 +38,6 @@ const ARCLINK_ABI = [
     outputs: [],
   },
 ] as const
-
-const TARGET_CHAIN_ID = 5042002 // Arc Testnet
 
 const glass = {
   card: {
@@ -59,20 +64,17 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
   const { address, isConnected, chainId } = useAccount()
   const { switchChain } = useSwitchChain()
 
-  const chain = requireChain(TARGET_CHAIN_ID)
-  const usdcFact = getUsdc(TARGET_CHAIN_ID)!
-  const USDC_ADDRESS = usdcFact.address as Address
-
+  const USDC_ADDRESS = TARGET_USDC_ADDRESS as Address
   const amountRaw = parseAmount(TARGET_CHAIN_ID, params.amount)
 
-  // Read USDC balance
+  // Read USDC balance (ERC-20 view — the only balance to show on Arc)
   const { data: balanceRaw, refetch: refetchBalance } = useReadContract({
     address: USDC_ADDRESS,
     abi: erc20Abi,
     functionName: 'balanceOf',
     args: [address ?? '0x0000000000000000000000000000000000000000'],
     chainId: TARGET_CHAIN_ID,
-    query: { enabled: !!address },
+    query: { enabled: !!address && !CONTRACT_PENDING },
   })
 
   // Read USDC allowance for ArcLink
@@ -82,14 +84,14 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
     functionName: 'allowance',
     args: [address ?? '0x0000000000000000000000000000000000000000', arcLinkAddress],
     chainId: TARGET_CHAIN_ID,
-    query: { enabled: !!address },
+    query: { enabled: !!address && !CONTRACT_PENDING },
   })
 
   const formattedBalance = balanceRaw !== undefined
     ? Amount.fromRaw(balanceRaw, usdcDecimalsFor(TARGET_CHAIN_ID)).toFixed(2)
     : null
 
-  const hasEnoughBalance = balanceRaw !== undefined && balanceRaw >= amountRaw.raw
+  const hasEnoughBalance  = balanceRaw  !== undefined && balanceRaw  >= amountRaw.raw
   const hasEnoughAllowance = allowanceRaw !== undefined && allowanceRaw >= amountRaw.raw
   const wrongChain = isConnected && chainId !== TARGET_CHAIN_ID
 
@@ -114,23 +116,15 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
     reset: resetPay,
   } = useWriteContract()
 
-  const {
-    isLoading: isPayConfirming,
-    isSuccess: isPaySuccess,
-  } = useWaitForTransactionReceipt({ hash: payHash })
+  const { isLoading: isPayConfirming, isSuccess: isPaySuccess } =
+    useWaitForTransactionReceipt({ hash: payHash })
 
-  // After approval confirmed, refetch allowance so the UI advances to step 2
   useEffect(() => {
-    if (isApproveSuccess) {
-      void refetchAllowance()
-    }
+    if (isApproveSuccess) void refetchAllowance()
   }, [isApproveSuccess, refetchAllowance])
 
-  // After pay confirmed, refetch balance
   useEffect(() => {
-    if (isPaySuccess) {
-      void refetchBalance()
-    }
+    if (isPaySuccess) void refetchBalance()
   }, [isPaySuccess, refetchBalance])
 
   const handleApprove = useCallback(() => {
@@ -164,9 +158,9 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
     switchChain({ chainId: TARGET_CHAIN_ID })
   }, [switchChain])
 
-  const txUrl = payHash ? buildTxExplorerUrl(TARGET_CHAIN_ID, payHash) : undefined
+  const txUrl = payHash ? buildTxUrl(payHash) : undefined
 
-  // Done state — show receipt
+  // Done — show receipt
   if (isPaySuccess && payHash) {
     return (
       <ReceiptPage
@@ -175,8 +169,8 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
         amount={params.amount}
         ref_={params.ref}
         txHash={payHash}
-        txUrl={txUrl!}
-        chainName={chain.name}
+        txUrl={txUrl ?? ''}
+        chainName={TARGET_NETWORK_LABEL}
         payer={address!}
       />
     )
@@ -187,6 +181,7 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
   return (
     <div className="min-h-dvh" style={{ background: 'var(--bg-gradient)' }}>
       <div className="mx-auto max-w-md px-4 py-8">
+
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -200,20 +195,39 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
                 <ArrowLeft className="size-4" style={{ color: 'var(--ink-2)' }} />
               </button>
             )}
-            <h1 className="display text-xl font-bold" style={{ color: 'var(--ink)', letterSpacing: '-0.02em' }}>
-              ArcLink
-            </h1>
+            <img src={logo} alt="ArcLink" className="h-9" style={{ width: 'auto' }} />
           </div>
           <ConnectKitButton />
         </div>
 
+        {/* Contract pending notice — replaces the whole action area */}
+        {CONTRACT_PENDING && (
+          <div
+            className="mb-4 flex items-start gap-3 rounded-2xl p-4"
+            style={{ background: 'rgba(220,168,66,0.10)', border: '1px solid rgba(220,168,66,0.35)' }}
+          >
+            <Clock className="mt-0.5 size-4 shrink-0" style={{ color: '#DCA842' }} />
+            <div>
+              <p className="text-sm font-semibold" style={{ color: '#29233B' }}>
+                Mainnet contract deployment pending
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed" style={{ color: '#5A5374' }}>
+                The ArcLink contract has not yet been deployed to Arc Mainnet.
+                Payment actions are disabled until a verified Mainnet contract address
+                is configured. No transaction will be sent.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Payment details card */}
         <div className="p-5" style={glass.card}>
+
           {/* Merchant identity */}
           <div className="mb-5 flex items-center gap-3">
             <div
               className="flex size-12 shrink-0 items-center justify-center rounded-2xl"
-              style={{ background: 'rgba(18,45,69,0.08)' }}
+              style={{ background: 'rgba(41,35,59,0.08)' }}
             >
               <Store className="size-6" style={{ color: 'var(--accent)' }} />
             </div>
@@ -226,22 +240,21 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
           </div>
 
           {/* Amount hero */}
-          <div
-            className="mb-5 flex flex-col items-center justify-center py-6"
-            style={glass.inner}
-          >
+          <div className="mb-5 flex flex-col items-center justify-center py-6" style={glass.inner}>
             <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--muted)' }}>
               Amount due
             </p>
             <div className="flex items-baseline gap-2">
-              <span className="display text-5xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
+              <span className="amount-display text-5xl" style={{ color: 'var(--ink)' }}>
                 {params.amount}
               </span>
-              <span className="text-xl font-semibold" style={{ color: 'var(--subtle)' }}>USDC</span>
+              <span className="text-xl font-semibold" style={{ color: 'var(--subtle)', fontFamily: 'var(--font-main)' }}>
+                USDC
+              </span>
             </div>
             <div className="mt-2 flex items-center gap-1.5">
               <TokenUSDC variant="branded" size={16} />
-              <span className="text-xs" style={{ color: 'var(--muted)' }}>{chain.name}</span>
+              <span className="text-xs" style={{ color: 'var(--muted)' }}>{TARGET_NETWORK_LABEL}</span>
             </div>
           </div>
 
@@ -256,8 +269,8 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
             </div>
           )}
 
-          {/* Balance row */}
-          {isConnected && address && (
+          {/* Balance row — only shown when contract is live */}
+          {!CONTRACT_PENDING && isConnected && address && (
             <div
               className="mb-4 flex items-center justify-between rounded-xl px-4 py-2.5"
               style={glass.inner}
@@ -275,7 +288,7 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
           {/* How it works */}
           <div
             className="mb-5 flex items-start gap-3 rounded-xl p-4"
-            style={{ background: 'rgba(18,45,69,0.04)', border: '1px solid var(--border)' }}
+            style={{ background: 'rgba(41,35,59,0.04)', border: '1px solid var(--border)' }}
           >
             <ShieldCheck className="mt-0.5 size-4 shrink-0" style={{ color: 'var(--accent)' }} />
             <p className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
@@ -285,20 +298,20 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
           </div>
 
           {/* Wrong chain warning */}
-          {wrongChain && (
+          {!CONTRACT_PENDING && wrongChain && (
             <div
               className="mb-4 flex items-center gap-3 rounded-xl px-4 py-3"
               style={{ background: 'rgba(186,43,76,0.08)', border: '1px solid rgba(186,43,76,0.20)' }}
             >
               <AlertTriangle className="size-4 shrink-0" style={{ color: 'var(--danger)' }} />
               <p className="text-xs font-medium" style={{ color: 'var(--danger)' }}>
-                Switch to {chain.name} to continue
+                Switch to {TARGET_NETWORK_LABEL} to continue
               </p>
             </div>
           )}
 
-          {/* Insufficient balance warning */}
-          {isConnected && !wrongChain && balanceRaw !== undefined && !hasEnoughBalance && (
+          {/* Insufficient balance */}
+          {!CONTRACT_PENDING && isConnected && !wrongChain && balanceRaw !== undefined && !hasEnoughBalance && (
             <div
               className="mb-4 flex items-center gap-3 rounded-xl px-4 py-3"
               style={{ background: 'rgba(186,43,76,0.08)', border: '1px solid rgba(186,43,76,0.20)' }}
@@ -306,12 +319,11 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
               <AlertTriangle className="size-4 shrink-0" style={{ color: 'var(--danger)' }} />
               <p className="text-xs font-medium" style={{ color: 'var(--danger)' }}>
                 Insufficient USDC balance. You need {params.amount} USDC.
-                Use &ldquo;Get test USDC&rdquo; in Arc Studio to add funds.
               </p>
             </div>
           )}
 
-          {/* Error */}
+          {/* Tx error */}
           {errorMsg && (
             <div
               className="mb-4 flex items-center gap-3 rounded-xl px-4 py-3"
@@ -322,8 +334,16 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
             </div>
           )}
 
-          {/* Action button */}
-          {!isConnected ? (
+          {/* Action buttons — disabled when contract pending */}
+          {CONTRACT_PENDING ? (
+            <button
+              disabled
+              className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white cursor-not-allowed opacity-40"
+              style={{ background: 'var(--accent)' }}
+            >
+              Payment unavailable — contract not deployed
+            </button>
+          ) : !isConnected ? (
             <ConnectKitButton.Custom>
               {({ show }) => (
                 <button
@@ -341,10 +361,9 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
               className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white transition-all hover:scale-[1.01] active:scale-[0.99]"
               style={{ background: 'var(--accent)' }}
             >
-              Switch to {chain.name}
+              Switch to {TARGET_NETWORK_LABEL}
             </button>
           ) : !hasEnoughAllowance ? (
-            /* Step 1: Approve */
             <button
               onClick={handleApprove}
               disabled={!hasEnoughBalance || isApprovePending || isApproveConfirming}
@@ -358,7 +377,6 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
                   : <>Allow {params.amount} USDC to be spent <ArrowRight className="size-4" /></>}
             </button>
           ) : (
-            /* Step 2: Pay */
             <button
               onClick={handlePay}
               disabled={!hasEnoughBalance || isPayPending || isPayConfirming}
@@ -373,16 +391,13 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
             </button>
           )}
 
-          {/* Step indicator */}
-          {isConnected && !wrongChain && (
+          {/* Step indicator — only shown when contract is live */}
+          {!CONTRACT_PENDING && isConnected && !wrongChain && (
             <div className="mt-3 flex items-center justify-center gap-4">
               <div className="flex items-center gap-1.5">
                 <div
                   className="flex size-5 items-center justify-center rounded-full text-xs font-bold"
-                  style={{
-                    background: hasEnoughAllowance ? 'var(--success)' : 'var(--accent)',
-                    color: 'white',
-                  }}
+                  style={{ background: hasEnoughAllowance ? 'var(--success)' : 'var(--accent)', color: 'white' }}
                 >
                   {hasEnoughAllowance ? '✓' : '1'}
                 </div>
@@ -393,7 +408,7 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
                 <div
                   className="flex size-5 items-center justify-center rounded-full text-xs font-bold"
                   style={{
-                    background: isPaySuccess ? 'var(--success)' : 'rgba(18,45,69,0.12)',
+                    background: isPaySuccess ? 'var(--success)' : 'rgba(41,35,59,0.12)',
                     color: isPaySuccess ? 'white' : 'var(--muted)',
                   }}
                 >

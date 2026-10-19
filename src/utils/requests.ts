@@ -6,28 +6,33 @@
  *
  * Records are saved in this browser/device only and will not automatically
  * sync to other devices or browsers.
+ *
+ * Target: Arc Mainnet (chain ID 5042). All RPC, explorer, and log queries
+ * use the Mainnet configuration from chain-config.ts.
  */
 
 import { createPublicClient, http, parseAbiItem, type Address } from 'viem'
+import {
+  TARGET_CHAIN_ID,
+  TARGET_RPC,
+  TARGET_EXPLORER,
+  ARCLINK_ADDRESS,
+} from '@/chain-config'
 
-// ── Arc Testnet constants ────────────────────────────────────────────────────
-export const ARC_TESTNET_CHAIN_ID = 5042002
-const ARC_RPC = 'https://rpc.testnet.arc.io'
-const ARCLINK_ADDRESS = (import.meta.env.VITE_ARCLINK_ADDRESS ?? '0x0000000000000000000000000000000000000000') as Address
+// USDC has 6 decimals on Arc Mainnet ERC-20 interface
 const USDC_DECIMALS = 6
-const EXPLORER_BASE = 'https://explorer.testnet.arc.io'
 
-// PaymentMade event (no usdcToken — final contract shape)
+// PaymentMade event (matches deployed ArcLink contract)
 const PAYMENT_MADE_ABI = parseAbiItem(
   'event PaymentMade(address indexed merchant, address indexed payer, uint256 amount, string ref)'
 )
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export type RequestStatus = 'Pending' | 'Paid' | 'Needs review'
 
 export interface PaymentRequest {
-  /** Unique identifier, also used as key */
+  /** Unique identifier */
   id: string
   /** Merchant payout address (checksummed) */
   merchant: string
@@ -43,10 +48,10 @@ export interface PaymentRequest {
   url: string
   /** ISO timestamp when created */
   createdAt: string
-  /** Arc Testnet block number at creation time (for log lookups) */
+  /** Block number at creation time (for log lookups — avoids scanning from genesis) */
   fromBlock: bigint | null
   status: RequestStatus
-  /** Payer address — set when Paid */
+  /** Payer address — set when Paid or Needs review */
   payer?: string
   /** Transaction hash — set when Paid or Needs review */
   txHash?: string
@@ -57,13 +62,13 @@ interface StoredRequest extends Omit<PaymentRequest, 'fromBlock'> {
   fromBlock: string | null
 }
 
-// ── Storage key ──────────────────────────────────────────────────────────────
+// ── Storage key ───────────────────────────────────────────────────────────────
 
 function storageKey(merchant: string): string {
   return `arclink:requests:${merchant.toLowerCase()}`
 }
 
-// ── Serialise / deserialise ──────────────────────────────────────────────────
+// ── Serialise / deserialise ───────────────────────────────────────────────────
 
 function toStored(r: PaymentRequest): StoredRequest {
   return { ...r, fromBlock: r.fromBlock !== null ? r.fromBlock.toString() : null }
@@ -73,7 +78,7 @@ function fromStored(s: StoredRequest): PaymentRequest {
   return { ...s, fromBlock: s.fromBlock !== null ? BigInt(s.fromBlock) : null }
 }
 
-// ── Public API ───────────────────────────────────────────────────────────────
+// ── Public storage API ────────────────────────────────────────────────────────
 
 /** Load all requests for a merchant address (most-recent first) */
 export function loadRequests(merchant: string): PaymentRequest[] {
@@ -89,7 +94,6 @@ export function loadRequests(merchant: string): PaymentRequest[] {
   }
 }
 
-/** Persist the full list for a merchant (overwrites) */
 function saveRequests(merchant: string, requests: PaymentRequest[]): void {
   localStorage.setItem(storageKey(merchant), JSON.stringify(requests.map(toStored)))
 }
@@ -110,7 +114,7 @@ export function updateRequest(merchant: string, updated: PaymentRequest): void {
   saveRequests(merchant, list)
 }
 
-// ── Reference generator ──────────────────────────────────────────────────────
+// ── Reference generator ───────────────────────────────────────────────────────
 
 /** Generate a short non-sensitive public tracking reference: ARCL-xxxxxxxx */
 export function generateTrackingRef(): string {
@@ -119,7 +123,7 @@ export function generateTrackingRef(): string {
   return `ARCL-${hex}`
 }
 
-// ── Amount helpers ───────────────────────────────────────────────────────────
+// ── Amount helpers ────────────────────────────────────────────────────────────
 
 /** Parse a decimal USDC string to raw uint256 (6-decimal integer) */
 export function parseUsdcAmount(decimal: string): bigint {
@@ -136,15 +140,16 @@ export function formatUsdcAmount(raw: bigint): string {
   return `${int}.${frac.toString().padStart(USDC_DECIMALS, '0').slice(0, 2)}`
 }
 
-// ── Explorer URL ─────────────────────────────────────────────────────────────
+// ── Explorer URL ──────────────────────────────────────────────────────────────
 
+/** Build an Arc Mainnet explorer transaction URL. */
 export function txExplorerUrl(hash: string): string {
-  return `${EXPLORER_BASE}/tx/${hash}`
+  return `${TARGET_EXPLORER}/tx/${hash}`
 }
 
-// ── Log query ────────────────────────────────────────────────────────────────
+// ── Log query ─────────────────────────────────────────────────────────────────
 
-const LOG_BATCH_RANGE = 2000n  // blocks per getLogs call
+const LOG_BATCH_RANGE = 2000n
 
 interface MatchResult {
   requestId: string
@@ -154,11 +159,14 @@ interface MatchResult {
 }
 
 /**
- * Scan PaymentMade logs for all pending/needs-review requests belonging to
- * a merchant. Returns a map of requestId → match result.
+ * Scan PaymentMade logs on Arc Mainnet for all pending/needs-review requests.
  *
- * Starts each query from the request's `fromBlock` (or current head – 10 000
- * if fromBlock is missing) to avoid scanning from genesis.
+ * Uses TARGET_RPC (Arc Mainnet) and ARCLINK_ADDRESS from chain-config.
+ * If CONTRACT_PENDING is true (zero address), returns an empty map immediately
+ * rather than querying an invalid address.
+ *
+ * Starts from each request's recorded fromBlock (or currentBlock − 10 000 when
+ * absent) to avoid scanning from block 0.
  */
 export async function scanForPayments(
   merchant: string,
@@ -167,27 +175,35 @@ export async function scanForPayments(
   const pending = requests.filter(r => r.status === 'Pending' || r.status === 'Needs review')
   if (pending.length === 0) return new Map()
 
-  const client = createPublicClient({ transport: http(ARC_RPC) })
+  // If the contract isn't deployed yet, skip log scanning entirely
+  const contractAddr = ARCLINK_ADDRESS
+  if (
+    contractAddr === '0x0000000000000000000000000000000000000000' ||
+    !import.meta.env.VITE_ARCLINK_ADDRESS
+  ) {
+    return new Map()
+  }
+
+  const client = createPublicClient({
+    transport: http(TARGET_RPC),
+    chain: { id: TARGET_CHAIN_ID, name: 'Arc', nativeCurrency: { name: 'USD Coin', symbol: 'USDC', decimals: 18 }, rpcUrls: { default: { http: [TARGET_RPC] } } },
+  })
 
   const currentBlock = await client.getBlockNumber()
 
-  // Group requests by their fromBlock so we can batch efficiently
-  // For simplicity, use the minimum fromBlock across all pending requests,
-  // capped at currentBlock - 10000 if no fromBlock recorded.
   const minFromBlock = pending.reduce<bigint>((min, r) => {
-    const fb = r.fromBlock ?? currentBlock - 10000n
+    const fb = r.fromBlock ?? (currentBlock > 10000n ? currentBlock - 10000n : 0n)
     return fb < min ? fb : min
   }, currentBlock)
 
   const results = new Map<string, MatchResult>()
 
-  // Scan in batches from minFromBlock to currentBlock
   let from = minFromBlock < 0n ? 0n : minFromBlock
   while (from <= currentBlock) {
     const to = from + LOG_BATCH_RANGE > currentBlock ? currentBlock : from + LOG_BATCH_RANGE
 
     const logs = await client.getLogs({
-      address: ARCLINK_ADDRESS,
+      address: contractAddr,
       event: PAYMENT_MADE_ABI,
       args: { merchant: merchant as Address },
       fromBlock: from,
@@ -195,7 +211,7 @@ export async function scanForPayments(
     })
 
     for (const log of logs) {
-      const { merchant: _m, payer, amount, ref } = log.args as {
+      const { payer, amount, ref } = log.args as {
         merchant: Address
         payer: Address
         amount: bigint
@@ -203,20 +219,14 @@ export async function scanForPayments(
       }
       const txHash = log.transactionHash ?? ''
 
-      // Find the request this log matches by trackingRef
       const matchedReq = pending.find(r => r.trackingRef === ref)
       if (!matchedReq) continue
-      if (results.has(matchedReq.id)) continue // already matched
+      if (results.has(matchedReq.id)) continue
 
       const expectedRaw = parseUsdcAmount(matchedReq.amount)
       const status: RequestStatus = amount === expectedRaw ? 'Paid' : 'Needs review'
 
-      results.set(matchedReq.id, {
-        requestId: matchedReq.id,
-        status,
-        payer: payer,
-        txHash,
-      })
+      results.set(matchedReq.id, { requestId: matchedReq.id, status, payer, txHash })
     }
 
     if (to === currentBlock) break
