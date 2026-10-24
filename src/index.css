@@ -67,7 +67,9 @@ body {
 /* Editorial serif — headlines, amounts, brand wordmark */
 .display {
   font-family: var(--font-serif);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.022em;
+  line-height: 1.12;
+  font-weight: 700;
 }
 
 /* Technical monospace — addresses, hashes, URLs */

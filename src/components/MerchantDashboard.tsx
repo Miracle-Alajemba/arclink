@@ -140,7 +140,7 @@ export default function MerchantDashboard({ onPreview, onBack }: MerchantDashboa
 
   return (
     <div className="min-h-dvh" style={{ background: 'var(--bg-gradient)' }}>
-      <div className="mx-auto max-w-md px-4 py-8">
+      <div className="mx-auto max-w-5xl px-4 py-6">
 
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
@@ -219,7 +219,8 @@ export default function MerchantDashboard({ onPreview, onBack }: MerchantDashboa
 
         {/* ── Create tab ─────────────────────────────────────────────── */}
         {tab === 'create' && (
-          <>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+            {/* Left column: form */}
             <div className="p-5" style={glass.card}>
               <div className="mb-4 flex items-center gap-2">
                 <div
@@ -358,9 +359,9 @@ export default function MerchantDashboard({ onPreview, onBack }: MerchantDashboa
               </button>
             </div>
 
-            {/* Generated link card */}
-            {generatedLink && (
-              <div className="mt-4 p-5" style={glass.card}>
+            {/* Right column: generated link card or placeholder */}
+            {generatedLink ? (
+              <div className="p-5" style={glass.card}>
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="size-5" style={{ color: 'var(--success)' }} />
@@ -458,8 +459,27 @@ export default function MerchantDashboard({ onPreview, onBack }: MerchantDashboa
                   Share this link with your customer. They open it, connect a wallet, approve USDC, and pay.
                 </p>
               </div>
+            ) : (
+              /* Placeholder shown before a link is generated */
+              <div
+                className="flex flex-col items-center justify-center gap-3 rounded-3xl p-8 text-center"
+                style={{ ...glass.card, minHeight: 220 }}
+              >
+                <div
+                  className="flex size-12 items-center justify-center rounded-2xl"
+                  style={{ background: 'var(--surface-muted)', border: '1px solid var(--border)' }}
+                >
+                  <Link2 className="size-5" style={{ color: 'var(--subtle)' }} />
+                </div>
+                <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>
+                  Your payment link will appear here
+                </p>
+                <p className="text-xs" style={{ color: 'var(--subtle)' }}>
+                  Fill in the form and click Generate
+                </p>
+              </div>
             )}
-          </>
+          </div>
         )}
 
         {/* ── Requests tab ───────────────────────────────────────────── */}

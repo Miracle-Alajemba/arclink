@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { ARC_MAINNET_EXPLORER, ARCLINK_ADDRESS, CONTRACT_PENDING } from '@/chain-config'
 import logo from '@/assets/arclink-logo.svg'
 import {
@@ -51,6 +51,38 @@ const cardStyle = (radius = 20): React.CSSProperties => ({
   borderRadius: radius,
 })
 
+// ── Shared animation variants ─────────────────────────────────────────────────
+function useFadeLeft(reduced: boolean) {
+  if (reduced) {
+    return {
+      hidden:  { opacity: 1, x: 0 },
+      visible: { opacity: 1, x: 0, transition: { duration: 0 } },
+    }
+  }
+  // x is kept very small (6px) so it never causes horizontal page overflow
+  // even on 320px viewports where the section is flush with the left edge.
+  return {
+    hidden:  { opacity: 0, x: -6 },
+    visible: (delay = 0) => ({
+      opacity: 1,
+      x: 0,
+      transition: { duration: 0.42, ease: 'easeOut' as const, delay },
+    }),
+  }
+}
+
+// Card hover: a gentle lift + border brightening, suppressed on reduced motion
+function useCardHover(reduced: boolean) {
+  if (reduced) return {}
+  return {
+    whileHover: {
+      y: -4,
+      boxShadow: '0 8px 28px rgba(41,35,59,0.09)',
+      transition: { duration: 0.2, ease: 'easeOut' as const },
+    },
+  }
+}
+
 // ── Nav link ─────────────────────────────────────────────────────────────────
 function NavLink({ href, label }: { href: string; label: string }) {
   return (
@@ -79,40 +111,54 @@ function StepDot({ n }: { n: number }) {
 }
 
 // ── Section eyebrow ───────────────────────────────────────────────────────────
-function Eyebrow({ children }: { children: React.ReactNode }) {
+function Eyebrow({ children, reduced }: { children: React.ReactNode; reduced: boolean }) {
   return (
-    <p
-      className="text-center text-[11px] font-bold uppercase tracking-[0.1em] mb-3"
+    <motion.p
+      variants={reduced
+        ? { hidden: { opacity: 1 }, visible: { opacity: 1 } }
+        : { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }
+      }
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, margin: '-40px' }}
+      className="text-center text-xs font-semibold uppercase tracking-[0.13em] mb-4"
       style={{ color: jelly }}
     >
       {children}
-    </p>
+    </motion.p>
   )
 }
 
 // ── Section headline ─────────────────────────────────────────────────────────
-function SectionHead({ children }: { children: React.ReactNode }) {
+function SectionHead({ children, reduced }: { children: React.ReactNode; reduced: boolean }) {
   return (
-    <h2
-      className="display text-3xl sm:text-4xl font-bold text-center text-balance mb-12"
-      style={{ color: licorice, letterSpacing: '-0.025em', lineHeight: 1.15 }}
+    <motion.h2
+      variants={reduced
+        ? { hidden: { opacity: 1, y: 0 }, visible: { opacity: 1, y: 0 } }
+        : { hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: { duration: 0.45, delay: 0.08 } } }
+      }
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, margin: '-40px' }}
+      className="display text-balance text-center mb-10"
+      style={{ color: licorice, fontSize: 'clamp(1.75rem, 4vw, 2.5rem)' }}
     >
       {children}
-    </h2>
+    </motion.h2>
   )
 }
 
 // ── Demo payment-link card ────────────────────────────────────────────────────
-function DemoCard() {
+function DemoCard({ reduced }: { reduced: boolean }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 28, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
+      initial={reduced ? false : { opacity: 0, y: 28, scale: 0.97 }}
+      animate={reduced ? {} : { opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
       className="w-full max-w-[320px]"
       style={{ ...glass(28), border: `1.5px solid ${borderSubtle}`, overflow: 'hidden' }}
     >
-      {/* Top accent line */}
+      {/* Top accent line — subtle pulse only when motion is allowed */}
       <div style={{ height: 3, background: `linear-gradient(90deg, ${jelly}, ${gumdrop})` }} />
 
       {/* Demo badge */}
@@ -146,16 +192,10 @@ function DemoCard() {
       {/* Amount */}
       <div className="px-5 pt-4 pb-4 flex items-end justify-between">
         <div>
-          <p
-            className="text-[10px] font-bold uppercase tracking-[0.08em] mb-1"
-            style={{ color: textMuted }}
-          >
+          <p className="text-[10px] font-bold uppercase tracking-[0.08em] mb-1" style={{ color: textMuted }}>
             Amount due
           </p>
-          <p
-            className="amount-display text-[2.6rem] leading-none tabular-nums"
-            style={{ color: licorice }}
-          >
+          <p className="amount-display text-[2.6rem] leading-none tabular-nums" style={{ color: licorice }}>
             12.00
           </p>
         </div>
@@ -164,9 +204,7 @@ function DemoCard() {
           style={{ background: bgCardSubtle, border: `1px solid ${borderSubtle}` }}
         >
           <TokenUSDC variant="branded" size={18} />
-          <span className="text-sm font-semibold" style={{ color: textSecondary }}>
-            USDC
-          </span>
+          <span className="text-sm font-semibold" style={{ color: textSecondary }}>USDC</span>
         </div>
       </div>
 
@@ -175,10 +213,7 @@ function DemoCard() {
         className="mx-5 mb-4 rounded-xl px-3 py-2.5"
         style={{ background: bgCardSubtle, border: `1px solid ${borderSubtle}` }}
       >
-        <p
-          className="text-[10px] font-bold uppercase tracking-[0.08em] mb-0.5"
-          style={{ color: textMuted }}
-        >
+        <p className="text-[10px] font-bold uppercase tracking-[0.08em] mb-0.5" style={{ color: textMuted }}>
           Reference
         </p>
         <p className="mono text-xs font-medium" style={{ color: textSecondary }}>
@@ -192,10 +227,7 @@ function DemoCard() {
         style={{ background: bgCardSubtle, border: `1px solid ${borderSubtle}` }}
       >
         <QrCode size={52} style={{ color: jelly, opacity: 0.22 }} />
-        <p
-          className="text-[10px] font-semibold uppercase tracking-widest"
-          style={{ color: textMuted }}
-        >
+        <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: textMuted }}>
           QR code generated on link creation
         </p>
       </div>
@@ -210,14 +242,17 @@ interface AudienceCardProps {
   body: string
   example: string
   delay: number
+  reduced: boolean
 }
-function AudienceCard({ icon, title, body, example, delay }: AudienceCardProps) {
+function AudienceCard({ icon, title, body, example, delay, reduced }: AudienceCardProps) {
+  const cardHover = useCardHover(reduced)
   return (
     <motion.div
-      initial={{ opacity: 0, y: 18 }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial={reduced ? false : { opacity: 0, y: 18 }}
+      whileInView={reduced ? {} : { opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-40px' }}
       transition={{ duration: 0.42, ease: 'easeOut', delay }}
+      {...cardHover}
       className="flex flex-col p-6 h-full"
       style={cardStyle(20)}
     >
@@ -227,28 +262,15 @@ function AudienceCard({ icon, title, body, example, delay }: AudienceCardProps) 
       >
         {icon}
       </div>
-      <p className="font-semibold mb-2 leading-snug" style={{ color: licorice }}>
-        {title}
-      </p>
-      <p
-        className="text-sm text-pretty flex-1 mb-4"
-        style={{ color: textSecondary, lineHeight: 1.65 }}
-      >
+      <p className="text-[0.9375rem] font-semibold mb-2 leading-snug" style={{ color: licorice }}>{title}</p>
+      <p className="text-sm text-pretty flex-1 mb-4" style={{ color: textSecondary, lineHeight: 1.7 }}>
         {body}
       </p>
-      <div
-        className="rounded-xl px-3 py-2.5"
-        style={{ background: bgCardSubtle, border: `1px solid ${borderSubtle}` }}
-      >
-        <p
-          className="text-[10px] font-bold uppercase tracking-[0.08em] mb-0.5"
-          style={{ color: textMuted }}
-        >
+      <div className="rounded-xl px-3 py-2.5" style={{ background: bgCardSubtle, border: `1px solid ${borderSubtle}` }}>
+        <p className="text-[10px] font-bold uppercase tracking-[0.08em] mb-0.5" style={{ color: textMuted }}>
           Example
         </p>
-        <p className="text-xs text-pretty" style={{ color: textSecondary, lineHeight: 1.55 }}>
-          {example}
-        </p>
+        <p className="text-xs text-pretty" style={{ color: textSecondary, lineHeight: 1.55 }}>{example}</p>
       </div>
     </motion.div>
   )
@@ -256,8 +278,12 @@ function AudienceCard({ icon, title, body, example, delay }: AudienceCardProps) 
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function LandingPage({ onCreateLink }: LandingPageProps) {
+  const reduced = useReducedMotion() ?? false
   const whoRef  = useRef<HTMLElement>(null)
   const howRef  = useRef<HTMLElement>(null)
+
+  const fadeLeft = useFadeLeft(reduced)
+  const cardHover = useCardHover(reduced)
 
   const scrollTo = (ref: React.RefObject<HTMLElement | null>) => {
     ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -269,32 +295,21 @@ export default function LandingPage({ onCreateLink }: LandingPageProps) {
   const REPO = 'https://github.com/Miracle-Alajemba/arclink'
 
   return (
-    <div className="min-h-dvh" style={{ background: 'var(--bg-gradient)' }}>
+    <div className="min-h-dvh" style={{ background: 'var(--bg-gradient)', overflowX: 'hidden' }}>
 
       {/* ── Network notice ───────────────────────────────────────────── */}
       <div
         className="w-full py-2 px-4 flex items-center justify-center gap-2 text-[11px] font-semibold"
-        style={{
-          background: gumdropBg,
-          borderBottom: `1px solid rgba(74,159,232,0.18)`,
-        }}
+        style={{ background: gumdropBg, borderBottom: `1px solid rgba(74,159,232,0.18)` }}
       >
         <span
           className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-bold"
-          style={{
-            background: gumdrop,
-            color: '#fff',
-            fontSize: 10,
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-          }}
+          style={{ background: gumdrop, color: '#fff', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase' }}
         >
           Arc Mainnet · 5042
         </span>
         {CONTRACT_PENDING ? (
-          <span style={{ color: licorice }}>
-            Contract deployment pending — payment actions disabled until deployed.
-          </span>
+          <span style={{ color: licorice }}>Contract deployment pending — payment actions disabled until deployed.</span>
         ) : (
           <span style={{ color: licorice }}>USDC payments on Arc Mainnet.</span>
         )}
@@ -309,7 +324,16 @@ export default function LandingPage({ onCreateLink }: LandingPageProps) {
           borderBottom: `1px solid ${borderSubtle}`,
         }}
       >
-        <img src={logo} alt="ArcLink" className="h-9 shrink-0" style={{ width: 'auto' }} />
+        {/* Logo with a gentle fade-in on mount, suppressed when reduced */}
+        <motion.img
+          src={logo}
+          alt="ArcLink"
+          className="h-9 shrink-0"
+          style={{ width: 'auto' }}
+          initial={reduced ? false : { opacity: 0, scale: 0.96 }}
+          animate={reduced ? {} : { opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+        />
 
         <div className="hidden sm:flex items-center gap-6">
           <NavLink href="#who-its-for" label="Who it's for" />
@@ -330,40 +354,40 @@ export default function LandingPage({ onCreateLink }: LandingPageProps) {
       </nav>
 
       {/* ── Hero ─────────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-5xl px-5 pt-16 pb-20 flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
-        <div className="flex-1 text-center lg:text-left">
+      <section className="mx-auto max-w-5xl px-5 pt-16 pb-20 flex flex-col lg:flex-row items-center gap-10 lg:gap-14">
+        <div className="flex-1 min-w-0 text-center lg:text-left">
           <motion.div
-            initial={{ opacity: 0, y: 22 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.52, ease: [0.22, 1, 0.36, 1] }}
+            initial={reduced ? false : { opacity: 0, y: 20 }}
+            animate={reduced ? {} : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.52, ease: [0.22, 1, 0.36, 1] as number[] }}
           >
             <p
               className="mb-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-widest"
-              style={{
-                background: gumdropBg,
-                color: gumdrop,
-                border: `1px solid rgba(74,159,232,0.28)`,
-              }}
+              style={{ background: gumdropBg, color: gumdrop, border: `1px solid rgba(74,159,232,0.28)` }}
             >
               Arc Mainnet · 5042
             </p>
 
             <h1
-              className="display text-4xl sm:text-5xl font-bold text-balance mb-5"
-              style={{ color: licorice, letterSpacing: '-0.03em', lineHeight: 1.08 }}
+              className="display text-balance mb-6"
+              style={{
+                color: licorice,
+                fontSize: 'clamp(2.25rem, 6vw, 3.75rem)',
+                lineHeight: 1.06,
+              }}
             >
               USDC checkout,<br />one link away.
             </h1>
 
             <p
-              className="text-base sm:text-lg text-pretty max-w-[42ch] mx-auto lg:mx-0 mb-3"
-              style={{ color: textSecondary, lineHeight: 1.65 }}
+              className="text-pretty max-w-[40ch] mx-auto lg:mx-0 mb-3 font-medium"
+              style={{ color: textSecondary, lineHeight: 1.6, fontSize: 'clamp(1rem, 1.8vw, 1.125rem)' }}
             >
               ArcLink helps you request a fixed USDC payment with a shareable link or QR code.
             </p>
             <p
-              className="text-sm text-pretty max-w-[48ch] mx-auto lg:mx-0 mb-8"
-              style={{ color: textMuted, lineHeight: 1.65 }}
+              className="text-sm text-pretty max-w-[46ch] mx-auto lg:mx-0 mb-8"
+              style={{ color: textMuted, lineHeight: 1.7 }}
             >
               The customer reviews the payment, connects their wallet, approves the exact USDC
               amount, and pays. The ArcLink contract forwards the payment directly to your payout
@@ -410,8 +434,8 @@ export default function LandingPage({ onCreateLink }: LandingPageProps) {
           </motion.div>
         </div>
 
-        <div className="flex-1 flex justify-center lg:justify-end">
-          <DemoCard />
+        <div className="w-full lg:w-auto lg:shrink-0 flex justify-center">
+          <DemoCard reduced={reduced} />
         </div>
       </section>
 
@@ -427,37 +451,41 @@ export default function LandingPage({ onCreateLink }: LandingPageProps) {
         }}
       >
         <div className="mx-auto max-w-5xl">
-          <Eyebrow>Who it's for</Eyebrow>
-          <SectionHead>One-time payment requests, simply shared.</SectionHead>
+          <Eyebrow reduced={reduced}>Who it's for</Eyebrow>
+          <SectionHead reduced={reduced}>One-time payment requests, simply shared.</SectionHead>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <AudienceCard
+              reduced={reduced}
               icon={<Briefcase className="size-5" style={{ color: jelly }} />}
               title="Freelancers and consultants"
               body="Send a client a link for a one-time project fee, invoice, or milestone payment. No shared account or payment processor needed — just your wallet address and the amount."
               example="A designer completes a logo project and sends the client a link for 500 USDC."
-              delay={0}
+              delay={reduced ? 0 : 0}
             />
             <AudienceCard
+              reduced={reduced}
               icon={<Store className="size-5" style={{ color: jelly }} />}
               title="Creators and small online sellers"
               body="Share a payment link in a direct message, email, or social bio. The customer opens it and pays without signing up for anything."
               example="A digital artist drops a 40 USDC payment link in their bio for a print order."
-              delay={0.06}
+              delay={reduced ? 0 : 0.06}
             />
             <AudienceCard
+              reduced={reduced}
               icon={<QrCode className="size-5" style={{ color: jelly }} />}
               title="Local businesses and pop-up vendors"
               body="Display a QR code at your counter or stall. A customer scans it with their phone, reviews the amount, and pays from their wallet."
               example="A market vendor shows a 25 USDC QR code at checkout for a handmade item."
-              delay={0.12}
+              delay={reduced ? 0 : 0.12}
             />
             <AudienceCard
+              reduced={reduced}
               icon={<Megaphone className="size-5" style={{ color: jelly }} />}
               title="Event and community organizers"
               body="Request a fixed USDC contribution, ticket payment, or event fee from attendees. Send the link in a group chat or post the QR code at the door."
               example="A meetup organizer shares a 10 USDC link for a workshop ticket."
-              delay={0.18}
+              delay={reduced ? 0 : 0.18}
             />
           </div>
 
@@ -476,14 +504,10 @@ export default function LandingPage({ onCreateLink }: LandingPageProps) {
       </section>
 
       {/* ── How it works ─────────────────────────────────────────────── */}
-      <section
-        id="how-it-works"
-        ref={howRef}
-        className="py-20 px-5"
-      >
+      <section id="how-it-works" ref={howRef} className="py-20 px-5">
         <div className="mx-auto max-w-3xl">
-          <Eyebrow>How it works</Eyebrow>
-          <SectionHead>From request to on-chain receipt in three steps.</SectionHead>
+          <Eyebrow reduced={reduced}>How it works</Eyebrow>
+          <SectionHead reduced={reduced}>From request to on-chain receipt in three steps.</SectionHead>
 
           <div className="space-y-4">
             {[
@@ -508,24 +532,17 @@ export default function LandingPage({ onCreateLink }: LandingPageProps) {
             ].map(({ title, body, note, delay }, i) => (
               <motion.div
                 key={i}
-                initial={{ opacity: 0, x: -18 }}
-                whileInView={{ opacity: 1, x: 0 }}
+                variants={fadeLeft}
+                initial="hidden"
+                whileInView={{ ...(fadeLeft.visible as (d: number) => object)(reduced ? 0 : delay) }}
                 viewport={{ once: true, margin: '-60px' }}
-                transition={{ duration: 0.42, ease: 'easeOut', delay }}
                 className="flex gap-5 p-5"
                 style={glass(20)}
               >
                 <StepDot n={i + 1} />
                 <div className="min-w-0">
-                  <p className="font-semibold mb-1.5" style={{ color: licorice }}>
-                    {title}
-                  </p>
-                  <p
-                    className="text-sm text-pretty"
-                    style={{ color: textSecondary, lineHeight: 1.65 }}
-                  >
-                    {body}
-                  </p>
+                  <p className="text-[0.9375rem] font-semibold mb-2 leading-snug" style={{ color: licorice }}>{title}</p>
+                  <p className="text-sm text-pretty" style={{ color: textSecondary, lineHeight: 1.7 }}>{body}</p>
                   {note && (
                     <p
                       className="mt-2.5 text-xs text-pretty rounded-lg px-3 py-2"
@@ -557,8 +574,8 @@ export default function LandingPage({ onCreateLink }: LandingPageProps) {
         }}
       >
         <div className="mx-auto max-w-4xl">
-          <Eyebrow>Why ArcLink</Eyebrow>
-          <SectionHead>Simple, shareable, wallet-to-wallet.</SectionHead>
+          <Eyebrow reduced={reduced}>Why ArcLink</Eyebrow>
+          <SectionHead reduced={reduced}>Simple, shareable, wallet-to-wallet.</SectionHead>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
             {[
@@ -583,43 +600,27 @@ export default function LandingPage({ onCreateLink }: LandingPageProps) {
             ].map(({ icon, title, body, delay }, i) => (
               <motion.div
                 key={i}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
+                initial={reduced ? false : { opacity: 0, y: 16 }}
+                whileInView={reduced ? {} : { opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-40px' }}
-                transition={{ duration: 0.42, ease: 'easeOut', delay }}
+                transition={{ duration: 0.42, ease: 'easeOut', delay: reduced ? 0 : delay }}
+                {...cardHover}
                 className="p-5"
                 style={cardStyle(20)}
               >
-                <div
-                  className="mb-4 flex size-10 items-center justify-center rounded-2xl"
-                  style={{ background: jellyBg }}
-                >
+                <div className="mb-4 flex size-10 items-center justify-center rounded-2xl" style={{ background: jellyBg }}>
                   {icon}
                 </div>
-                <p className="font-semibold mb-2" style={{ color: licorice }}>
-                  {title}
-                </p>
-                <p
-                  className="text-sm text-pretty"
-                  style={{ color: textSecondary, lineHeight: 1.65 }}
-                >
-                  {body}
-                </p>
+                <p className="text-[0.9375rem] font-semibold mb-2 leading-snug" style={{ color: licorice }}>{title}</p>
+                <p className="text-sm text-pretty" style={{ color: textSecondary, lineHeight: 1.7 }}>{body}</p>
               </motion.div>
             ))}
           </div>
 
           {/* Honest limitations grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* What's included */}
-            <div
-              className="rounded-2xl px-5 py-5"
-              style={{ background: bgCardSubtle, border: `1px solid ${borderSubtle}` }}
-            >
-              <p
-                className="text-[11px] font-bold uppercase tracking-[0.08em] mb-3"
-                style={{ color: jelly }}
-              >
+            <div className="rounded-2xl px-5 py-5" style={{ background: bgCardSubtle, border: `1px solid ${borderSubtle}` }}>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] mb-3" style={{ color: jelly }}>
                 What ArcLink does
               </p>
               <ul className="space-y-2">
@@ -632,26 +633,14 @@ export default function LandingPage({ onCreateLink }: LandingPageProps) {
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-2.5">
                     <Check className="size-3.5 mt-0.5 shrink-0" style={{ color: '#1FD286' }} />
-                    <span
-                      className="text-sm text-pretty"
-                      style={{ color: textSecondary, lineHeight: 1.55 }}
-                    >
-                      {item}
-                    </span>
+                    <span className="text-sm text-pretty" style={{ color: textSecondary, lineHeight: 1.55 }}>{item}</span>
                   </li>
                 ))}
               </ul>
             </div>
 
-            {/* What's not included */}
-            <div
-              className="rounded-2xl px-5 py-5"
-              style={{ background: bgCardSubtle, border: `1px solid ${borderSubtle}` }}
-            >
-              <p
-                className="text-[11px] font-bold uppercase tracking-[0.08em] mb-3"
-                style={{ color: textMuted }}
-              >
+            <div className="rounded-2xl px-5 py-5" style={{ background: bgCardSubtle, border: `1px solid ${borderSubtle}` }}>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] mb-3" style={{ color: textMuted }}>
                 What ArcLink does not do
               </p>
               <ul className="space-y-2">
@@ -664,12 +653,7 @@ export default function LandingPage({ onCreateLink }: LandingPageProps) {
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-2.5">
                     <X className="size-3.5 mt-0.5 shrink-0" style={{ color: '#E53E3E' }} />
-                    <span
-                      className="text-sm text-pretty"
-                      style={{ color: textMuted, lineHeight: 1.55 }}
-                    >
-                      {item}
-                    </span>
+                    <span className="text-sm text-pretty" style={{ color: textMuted, lineHeight: 1.55 }}>{item}</span>
                   </li>
                 ))}
               </ul>
@@ -696,8 +680,8 @@ export default function LandingPage({ onCreateLink }: LandingPageProps) {
       <section className="py-20 px-5">
         <div className="mx-auto max-w-md text-center">
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
+            initial={reduced ? false : { opacity: 0, y: 16 }}
+            whileInView={reduced ? {} : { opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-40px' }}
             transition={{ duration: 0.42, ease: 'easeOut' }}
           >
