@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { erc20Abi, type Address } from 'viem'
 import {
   useAccount,
@@ -8,7 +8,10 @@ import {
   useSwitchChain,
 } from 'wagmi'
 import { ConnectKitButton } from 'connectkit'
-import { ShieldCheck, AlertTriangle, Loader2, ArrowRight, Store, ArrowLeft, Clock } from 'lucide-react'
+import {
+  ShieldCheck, AlertTriangle, Loader2, ArrowRight, Store,
+  ArrowLeft, Clock, Info,
+} from 'lucide-react'
 import logo from '@/assets/arclink-logo.svg'
 import { TokenUSDC } from '@web3icons/react'
 import { parseOnchainError } from '@/utils/errors'
@@ -64,6 +67,9 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
   const { address, isConnected, chainId } = useAccount()
   const { switchChain } = useSwitchChain()
 
+  // Confirmation checkbox: payer must tick before actions are enabled
+  const [confirmed, setConfirmed] = useState(false)
+
   const USDC_ADDRESS = TARGET_USDC_ADDRESS as Address
   const amountRaw = parseAmount(TARGET_CHAIN_ID, params.amount)
 
@@ -91,7 +97,7 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
     ? Amount.fromRaw(balanceRaw, usdcDecimalsFor(TARGET_CHAIN_ID)).toFixed(2)
     : null
 
-  const hasEnoughBalance  = balanceRaw  !== undefined && balanceRaw  >= amountRaw.raw
+  const hasEnoughBalance   = balanceRaw   !== undefined && balanceRaw   >= amountRaw.raw
   const hasEnoughAllowance = allowanceRaw !== undefined && allowanceRaw >= amountRaw.raw
   const wrongChain = isConnected && chainId !== TARGET_CHAIN_ID
 
@@ -178,6 +184,9 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
 
   const errorMsg = isPayError && payError ? parseOnchainError(payError) : ''
 
+  // Action area is only interactive when the payer has confirmed the details
+  const actionsEnabled = confirmed && !CONTRACT_PENDING
+
   return (
     <div className="min-h-dvh" style={{ background: 'var(--bg-gradient)' }}>
       <div className="mx-auto max-w-md px-4 py-8">
@@ -200,7 +209,7 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
           <ConnectKitButton />
         </div>
 
-        {/* Contract pending notice — replaces the whole action area */}
+        {/* Contract pending notice */}
         {CONTRACT_PENDING && (
           <div
             className="mb-4 flex items-start gap-3 rounded-2xl p-4"
@@ -220,27 +229,68 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
           </div>
         )}
 
+        {/* ── Link origin warning ────────────────────────────────────── */}
+        <div
+          className="mb-4 flex items-start gap-3 rounded-2xl p-4"
+          style={{ background: 'rgba(107,92,165,0.06)', border: '1px solid rgba(107,92,165,0.18)' }}
+        >
+          <Info className="mt-0.5 size-4 shrink-0" style={{ color: 'var(--jelly, #6B5CA5)' }} />
+          <p className="text-xs leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+            <span className="font-semibold">Payment details come from this URL.</span>{' '}
+            They are not cryptographically signed or verified by ArcLink.
+            Before paying, confirm the recipient address and amount match what the merchant
+            told you directly. This notice does not prevent someone from altering a link.
+          </p>
+        </div>
+
         {/* Payment details card */}
         <div className="p-5" style={glass.card}>
 
-          {/* Merchant identity */}
-          <div className="mb-5 flex items-center gap-3">
-            <div
-              className="flex size-12 shrink-0 items-center justify-center rounded-2xl"
-              style={{ background: 'rgba(41,35,59,0.08)' }}
-            >
-              <Store className="size-6" style={{ color: 'var(--accent)' }} />
+          {/* Merchant name + chain badge */}
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div
+                className="flex size-12 shrink-0 items-center justify-center rounded-2xl"
+                style={{ background: 'rgba(41,35,59,0.08)' }}
+              >
+                <Store className="size-6" style={{ color: 'var(--accent)' }} />
+              </div>
+              <div>
+                <p className="font-semibold" style={{ color: 'var(--ink)' }}>{params.merchantName}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>Payment recipient</p>
+              </div>
             </div>
-            <div>
-              <p className="font-semibold" style={{ color: 'var(--ink)' }}>{params.merchantName}</p>
-              <p className="mono text-xs" style={{ color: 'var(--subtle)' }}>
-                {params.merchant.slice(0, 10)}...{params.merchant.slice(-6)}
-              </p>
+            {/* Chain ID badge */}
+            <div
+              className="shrink-0 rounded-xl px-2.5 py-1 text-xs font-semibold"
+              style={{
+                background: 'rgba(74,159,232,0.10)',
+                border: '1px solid rgba(74,159,232,0.25)',
+                color: 'var(--gumdrop, #4A9FE8)',
+              }}
+            >
+              Chain {TARGET_CHAIN_ID}
             </div>
           </div>
 
+          {/* Full payout address — readable on mobile */}
+          <div
+            className="mb-4 rounded-xl px-4 py-3"
+            style={glass.inner}
+          >
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
+              Recipient address
+            </p>
+            <p
+              className="mono break-all text-xs leading-relaxed"
+              style={{ color: 'var(--ink)', wordBreak: 'break-all' }}
+            >
+              {params.merchant}
+            </p>
+          </div>
+
           {/* Amount hero */}
-          <div className="mb-5 flex flex-col items-center justify-center py-6" style={glass.inner}>
+          <div className="mb-4 flex flex-col items-center justify-center py-5" style={glass.inner}>
             <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--muted)' }}>
               Amount due
             </p>
@@ -265,11 +315,11 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
               style={glass.inner}
             >
               <span className="text-xs font-semibold" style={{ color: 'var(--muted)' }}>Reference</span>
-              <span className="text-xs font-medium" style={{ color: 'var(--ink-2)' }}>{params.ref}</span>
+              <span className="mono text-xs font-medium" style={{ color: 'var(--ink-2)' }}>{params.ref}</span>
             </div>
           )}
 
-          {/* Balance row — only shown when contract is live */}
+          {/* Balance row */}
           {!CONTRACT_PENDING && isConnected && address && (
             <div
               className="mb-4 flex items-center justify-between rounded-xl px-4 py-2.5"
@@ -292,10 +342,33 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
           >
             <ShieldCheck className="mt-0.5 size-4 shrink-0" style={{ color: 'var(--accent)' }} />
             <p className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
-              Payments go directly to the merchant in the same transaction via the ArcLink contract.
-              You first allow USDC spending, then confirm payment. Two wallet steps total.
+              Payments go directly to the recipient address above via the ArcLink contract.
+              You first allow USDC spending, then confirm payment — two wallet confirmations total.
             </p>
           </div>
+
+          {/* ── Confirmation checkbox ──────────────────────────────────── */}
+          {!CONTRACT_PENDING && (
+            <label
+              className="mb-4 flex cursor-pointer items-start gap-3 rounded-xl p-4 transition-colors"
+              style={{
+                background: confirmed ? 'rgba(31,210,134,0.06)' : 'rgba(41,35,59,0.04)',
+                border: `1px solid ${confirmed ? 'rgba(31,210,134,0.30)' : 'var(--border)'}`,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={(e) => setConfirmed(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 cursor-pointer accent-[#29233B]"
+                aria-label="Confirm recipient address and amount"
+              />
+              <p className="select-none text-xs leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+                I have verified that the recipient address and amount above match what the merchant
+                intended. I understand this app cannot verify the authenticity of this payment link.
+              </p>
+            </label>
+          )}
 
           {/* Wrong chain warning */}
           {!CONTRACT_PENDING && wrongChain && (
@@ -334,7 +407,7 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
             </div>
           )}
 
-          {/* Action buttons — disabled when contract pending */}
+          {/* Action buttons */}
           {CONTRACT_PENDING ? (
             <button
               disabled
@@ -366,7 +439,7 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
           ) : !hasEnoughAllowance ? (
             <button
               onClick={handleApprove}
-              disabled={!hasEnoughBalance || isApprovePending || isApproveConfirming}
+              disabled={!actionsEnabled || !hasEnoughBalance || isApprovePending || isApproveConfirming}
               className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold text-white transition-all hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
               style={{ background: 'var(--accent)' }}
             >
@@ -374,12 +447,14 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
                 ? <><Loader2 className="size-4 animate-spin" /> Confirm in wallet...</>
                 : isApproveConfirming
                   ? <><Loader2 className="size-4 animate-spin" /> Approving USDC...</>
-                  : <>Allow {params.amount} USDC to be spent <ArrowRight className="size-4" /></>}
+                  : !confirmed
+                    ? <>Tick the box above to continue</>
+                    : <>Allow {params.amount} USDC to be spent <ArrowRight className="size-4" /></>}
             </button>
           ) : (
             <button
               onClick={handlePay}
-              disabled={!hasEnoughBalance || isPayPending || isPayConfirming}
+              disabled={!actionsEnabled || !hasEnoughBalance || isPayPending || isPayConfirming}
               className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold text-white transition-all hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
               style={{ background: 'var(--success)' }}
             >
@@ -387,11 +462,13 @@ export default function CheckoutPage({ params, arcLinkAddress, onBack }: Checkou
                 ? <><Loader2 className="size-4 animate-spin" /> Confirm in wallet...</>
                 : isPayConfirming
                   ? <><Loader2 className="size-4 animate-spin" /> Confirming payment...</>
-                  : <>Pay {params.amount} USDC <ArrowRight className="size-4" /></>}
+                  : !confirmed
+                    ? <>Tick the box above to continue</>
+                    : <>Pay {params.amount} USDC <ArrowRight className="size-4" /></>}
             </button>
           )}
 
-          {/* Step indicator — only shown when contract is live */}
+          {/* Step indicator */}
           {!CONTRACT_PENDING && isConnected && !wrongChain && (
             <div className="mt-3 flex items-center justify-center gap-4">
               <div className="flex items-center gap-1.5">

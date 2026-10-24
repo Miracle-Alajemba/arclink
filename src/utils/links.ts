@@ -1,4 +1,5 @@
 import { isAddress } from 'viem'
+import { parseAmountParam } from './amount'
 
 export interface ArcLinkParams {
   merchant: string
@@ -10,6 +11,9 @@ export interface ArcLinkParams {
 /**
  * Parse query string params from the current URL into a typed ArcLinkParams.
  * Returns null when the URL does not contain a valid ArcLink payment request.
+ *
+ * Amount validation uses BigInt arithmetic — no parseFloat.
+ * An amount with more than 2 decimal places (e.g. "4.501") is rejected.
  */
 export function parseArcLinkParams(search: string): ArcLinkParams | null {
   const params = new URLSearchParams(search)
@@ -20,13 +24,13 @@ export function parseArcLinkParams(search: string): ArcLinkParams | null {
   if (!merchant || !name || !amount) return null
   if (!isAddress(merchant)) return null
 
-  const amountNum = parseFloat(amount)
-  if (isNaN(amountNum) || amountNum <= 0) return null
+  const normalized = parseAmountParam(amount)
+  if (normalized === null) return null
 
   return {
     merchant,
     merchantName: name,
-    amount: amountNum.toFixed(2),
+    amount: normalized,
     ref: params.get('ref') ?? undefined,
   }
 }

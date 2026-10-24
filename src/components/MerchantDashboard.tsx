@@ -12,6 +12,7 @@ import QRCode from './QRCode'
 import PaymentRequests from './PaymentRequests'
 import type { ArcLinkParams } from '@/utils/links'
 import { generateTrackingRef, addRequest } from '@/utils/requests'
+import { validateUsdcAmount } from '@/utils/amount'
 
 import { TARGET_RPC } from '@/chain-config'
 
@@ -78,28 +79,30 @@ export default function MerchantDashboard({ onPreview, onBack }: MerchantDashboa
   const [copied, setCopied] = useState(false)
 
   const addressValid = payoutAddress.trim().length > 0 && isAddress(payoutAddress.trim())
-  const amountNum = parseFloat(amount)
-  const amountValid = !isNaN(amountNum) && amountNum > 0
+  const amountResult = validateUsdcAmount(amount)
+  const amountValid = amountResult.ok
+  const amountError = amount.length > 0 && !amountResult.ok ? amountResult.error : ''
   const nameValid = merchantName.trim().length > 0
   const canGenerate = nameValid && addressValid && amountValid
 
   const handleGenerate = useCallback(async () => {
-    if (!canGenerate) return
+    if (!canGenerate || !amountResult.ok) return
+    const normalizedAmount = amountResult.normalized
 
     const trackingRef = generateTrackingRef()
     const base = window.location.origin
     const params = new URLSearchParams({
       merchant: payoutAddress.trim(),
       name: merchantName.trim(),
-      amount: amountNum.toFixed(2),
-      ref: trackingRef,           // always include tracking ref in the link
+      amount: normalizedAmount,
+      ref: trackingRef,
     })
     const url = `${base}/?${params.toString()}`
 
     const link: PaymentLink = {
       merchant: payoutAddress.trim(),
       merchantName: merchantName.trim(),
-      amount: amountNum.toFixed(2),
+      amount: normalizedAmount,
       trackingRef,
       privateLabel: privateLabel.trim(),
       url,
@@ -114,7 +117,7 @@ export default function MerchantDashboard({ onPreview, onBack }: MerchantDashboa
       id: `${trackingRef}-${Date.now()}`,
       merchant: payoutAddress.trim(),
       merchantName: merchantName.trim(),
-      amount: amountNum.toFixed(2),
+      amount: normalizedAmount,
       trackingRef,
       privateLabel: privateLabel.trim() || undefined,
       url,
@@ -124,7 +127,7 @@ export default function MerchantDashboard({ onPreview, onBack }: MerchantDashboa
     })
 
     toast.success('Payment link created and saved to tracker')
-  }, [canGenerate, payoutAddress, merchantName, amountNum, privateLabel])
+  }, [canGenerate, amountResult, payoutAddress, merchantName, privateLabel])
 
   const handleCopy = useCallback(() => {
     if (!generatedLink) return
@@ -286,14 +289,16 @@ export default function MerchantDashboard({ onPreview, onBack }: MerchantDashboa
                       type="text"
                       value={amount}
                       onChange={(e) => {
+                        // Allow digits and at most one dot; reject anything else immediately
                         const v = e.target.value.replace(/[^0-9.]/g, '')
-                        if (v === '' || /^\d*\.?\d*$/.test(v)) setAmount(v)
+                        if (v === '' || /^\d*\.?\d{0,2}$/.test(v)) setAmount(v)
+                        else setAmount(v.replace(/\.(\d{2})\d+$/, '.$1')) // trim to 2dp on paste
                       }}
                       placeholder="0.00"
                       className="amount-display w-full rounded-xl py-3 pl-4 pr-20 text-2xl outline-none transition-all"
                       style={{
                         background: 'var(--surface-muted)',
-                        border: `1px solid ${amount && !amountValid ? 'var(--danger)' : 'var(--border)'}`,
+                        border: `1px solid ${amountError ? 'var(--danger)' : 'var(--border)'}`,
                         color: 'var(--ink)',
                       }}
                     />
@@ -302,6 +307,11 @@ export default function MerchantDashboard({ onPreview, onBack }: MerchantDashboa
                       <span className="text-sm font-semibold" style={{ color: 'var(--muted)' }}>USDC</span>
                     </div>
                   </div>
+                  {amountError && (
+                    <p className="mt-1 text-xs" style={{ color: 'var(--danger)' }}>
+                      {amountError}
+                    </p>
+                  )}
                 </div>
 
                 {/* Private label (local only) */}
