@@ -50,6 +50,45 @@ After the payment transaction succeeds, the checkout shows the real transaction 
 
 Never enter or share a wallet's private key or recovery phrase in ArcLink. ArcLink needs only public wallet addresses and customer signatures in their own wallet interface.
 
+## Architecture at a glance
+
+```mermaid
+flowchart LR
+  Merchant[Merchant] --> Dashboard
+  Link --> Customer[Customer opens checkout]
+  Customer --> Checkout
+  Checkout --> Wallet[Customer wallet<br/>reviews and signs]
+
+  subgraph Web[ArcLink web app · React and Vite · hosted on Vercel]
+    Dashboard[Merchant dashboard<br/>Create link and QR]
+    Link[Shareable payment URL or QR]
+    Checkout[Customer checkout page]
+    Tracker[Merchant request tracker]
+    Local[(Merchant browser localStorage<br/>requests and private label)]
+    Dashboard --> Link
+    Dashboard --> Local
+    Local --> Tracker
+  end
+
+  subgraph Arc[Arc Mainnet · chain 5042]
+    Contract[ArcLink contract<br/>pay merchant, amount, token, ref]
+    USDC[USDC token contract]
+    RPC[Arc RPC]
+    Explorer[Arc Explorer]
+  end
+
+  Wallet -->|approve USDC if needed| USDC
+  Wallet -->|submit payment| Contract
+  Contract -->|transferFrom payer, then forward| USDC
+  USDC -->|exact amount| Payout[Merchant payout address]
+  Contract -->|PaymentMade event| RPC
+  Tracker -->|read event logs| RPC
+  RPC --> Tracker
+  Checkout -->|transaction receipt link| Explorer
+```
+
+The merchant creates the request in the browser; the customer signs the payment with their own wallet. ArcLink calls the USDC token contract to move the exact amount to the payout address. The tracker reads the public `PaymentMade` event from Arc RPC and combines it with the request record saved in that merchant's browser. Arc Explorer is where either party can inspect the transaction.
+
 ## What happens on-chain?
 
 The ArcLink contract is a small, stateless Solidity contract. It accepts only the USDC token address pinned when the contract was deployed. When a customer pays, the contract:
