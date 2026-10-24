@@ -6,8 +6,6 @@ ArcLink is a payment-link and checkout app for one-time, fixed-amount USDC payme
 
 A merchant creates a link or QR code. A customer opens it, checks the details, connects a wallet, approves the USDC allowance if needed, and confirms payment. The ArcLink smart contract forwards the exact payment to the merchant's payout address in the same transaction.
 
-> **Current status:** The contract is deployed to Arc Mainnet and the live app is configured for Mainnet. A real customer payment through the public app has not yet been verified. This README does not claim that the live payment test is complete.
-
 - **Live app:** [usearclink.vercel.app](https://usearclink.vercel.app/)
 - **GitHub repository:** [Miracle-Alajemba/arclink](https://github.com/Miracle-Alajemba/arclink)
 - **ArcLink contract:** [0x973AA3397d218a12765388E2006E6603Bf83222a](https://explorer.arc.io/address/0x973AA3397d218a12765388E2006E6603Bf83222a)
