@@ -108,21 +108,44 @@ export default function ReceiptPage({
           <div className="space-y-2 rounded-2xl p-4" style={glass.inner}>
             <DetailRow label="Merchant" value={merchantName} />
             <div className="h-px" style={{ background: 'var(--border)' }} />
-            <DetailRow
-              label="Merchant address"
-              value={`${merchant.slice(0, 8)}...${merchant.slice(-6)}`}
-              mono
-            />
+            {/* Full address — break-all so it wraps on narrow screens */}
+            <div>
+              <span className="text-xs font-semibold" style={{ color: 'var(--muted)' }}>
+                Paid to
+              </span>
+              <p
+                className="mono mt-0.5 text-xs break-all"
+                style={{ color: 'var(--ink-2)' }}
+              >
+                {merchant}
+              </p>
+            </div>
             <div className="h-px" style={{ background: 'var(--border)' }} />
-            <DetailRow
-              label="From"
-              value={`${payer.slice(0, 8)}...${payer.slice(-6)}`}
-              mono
-            />
+            <div>
+              <span className="text-xs font-semibold" style={{ color: 'var(--muted)' }}>
+                Paid from
+              </span>
+              <p
+                className="mono mt-0.5 text-xs break-all"
+                style={{ color: 'var(--ink-2)' }}
+              >
+                {payer}
+              </p>
+            </div>
             {ref_ && (
               <>
                 <div className="h-px" style={{ background: 'var(--border)' }} />
-                <DetailRow label="Reference" value={ref_} />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold" style={{ color: 'var(--muted)' }}>
+                    Reference
+                  </span>
+                  <span
+                    className="mono text-xs font-semibold px-2 py-0.5 rounded-lg"
+                    style={{ background: 'rgba(107,92,165,0.09)', color: 'var(--jelly, #6B5CA5)' }}
+                  >
+                    {ref_}
+                  </span>
+                </div>
               </>
             )}
           </div>

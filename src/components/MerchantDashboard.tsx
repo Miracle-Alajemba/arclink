@@ -1,14 +1,16 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { isAddress } from 'viem'
 import logo from '@/assets/arclink-logo.svg'
 import { ConnectKitButton } from 'connectkit'
 import {
   Copy, Link2, QrCode, CheckCircle, Store, ChevronRight,
-  Eye, ArrowLeft, List, PlusCircle, Lock,
+  Eye, ArrowLeft, List, PlusCircle, Lock, Download, Printer,
+  Info,
 } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import QRCode from './QRCode'
+import type { QRCodeHandle } from './QRCode'
 import PaymentRequests from './PaymentRequests'
 import type { ArcLinkParams } from '@/utils/links'
 import { generateTrackingRef, addRequest } from '@/utils/requests'
@@ -77,6 +79,7 @@ export default function MerchantDashboard({ onPreview, onBack }: MerchantDashboa
   const [generatedLink, setGeneratedLink] = useState<PaymentLink | null>(null)
   const [showQR, setShowQR] = useState(false)
   const [copied, setCopied] = useState(false)
+  const qrRef = useRef<QRCodeHandle>(null)
 
   const addressValid = payoutAddress.trim().length > 0 && isAddress(payoutAddress.trim())
   const amountResult = validateUsdcAmount(amount)
@@ -136,6 +139,51 @@ export default function MerchantDashboard({ onPreview, onBack }: MerchantDashboa
       toast.success('Payment link copied!')
       setTimeout(() => setCopied(false), 2000)
     })
+  }, [generatedLink])
+
+  const handleDownloadQR = useCallback(() => {
+    if (!generatedLink) return
+    const dataUrl = qrRef.current?.toDataURL()
+    if (!dataUrl) { toast.error('QR not ready — show it first'); return }
+    const a = document.createElement('a')
+    a.href = dataUrl
+    a.download = `arclink-qr-${generatedLink.trackingRef}.png`
+    a.click()
+    toast.success('QR downloaded')
+  }, [generatedLink])
+
+  const handlePrintQR = useCallback(() => {
+    if (!generatedLink) return
+    const dataUrl = qrRef.current?.toDataURL()
+    if (!dataUrl) { toast.error('QR not ready — show it first'); return }
+    const w = window.open('', '_blank', 'width=480,height=640')
+    if (!w) { toast.error('Pop-up blocked — allow pop-ups and try again'); return }
+    w.document.write(`<!doctype html><html><head>
+      <meta charset="utf-8">
+      <title>ArcLink payment QR — ${generatedLink.merchantName}</title>
+      <style>
+        body{margin:0;padding:24px;font-family:system-ui,sans-serif;color:#29233B;background:#fff}
+        .wrap{max-width:320px;margin:0 auto;text-align:center}
+        img{border-radius:12px;width:260px;height:260px;display:block;margin:0 auto 16px}
+        h2{margin:0 0 4px;font-size:1.2rem}
+        .amount{font-size:2rem;font-weight:700;margin:8px 0 2px}
+        .ref{font-family:monospace;font-size:0.75rem;color:#8E89A5;margin:4px 0 12px}
+        .address{font-family:monospace;font-size:0.7rem;word-break:break-all;color:#5A5374;margin:4px 0 16px}
+        .note{font-size:0.7rem;color:#8E89A5;border-top:1px solid #D4DAF0;padding-top:12px;margin-top:8px}
+        @media print{body{padding:0}}
+      </style>
+    </head><body>
+      <div class="wrap">
+        <img src="${dataUrl}" alt="Payment QR code">
+        <h2>${generatedLink.merchantName}</h2>
+        <div class="amount">${generatedLink.amount} <span style="font-size:1rem;font-weight:500">USDC</span></div>
+        <div class="ref">${generatedLink.trackingRef}</div>
+        <div class="address">Pay to: ${generatedLink.merchant}</div>
+        <div class="note">Scan to open the ArcLink payment page. Arc Mainnet · Chain ID 5042.</div>
+      </div>
+      <script>window.onload=function(){window.print()}<\/script>
+    </body></html>`)
+    w.document.close()
   }, [generatedLink])
 
   return (
@@ -277,6 +325,14 @@ export default function MerchantDashboard({ onPreview, onBack }: MerchantDashboa
                       Invalid Ethereum address
                     </p>
                   )}
+                  {/* Wallet role hint */}
+                  <div className="mt-1.5 flex items-start gap-1.5">
+                    <Info className="size-3 mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
+                    <p className="text-[11px]" style={{ color: 'var(--subtle)' }}>
+                      <strong style={{ color: 'var(--ink-2)', fontWeight: 600 }}>Payout address</strong> = where you receive USDC as the merchant.{' '}
+                      <strong style={{ color: 'var(--ink-2)', fontWeight: 600 }}>Connected wallet</strong> = the customer's wallet that approves and pays.
+                    </p>
+                  </div>
                 </div>
 
                 {/* Amount */}
@@ -407,8 +463,31 @@ export default function MerchantDashboard({ onPreview, onBack }: MerchantDashboa
 
                 {/* QR code */}
                 {showQR && (
-                  <div className="mb-3 flex justify-center rounded-2xl p-6" style={glass.inner}>
-                    <QRCode value={generatedLink.url} size={200} />
+                  <div className="mb-3 rounded-2xl p-5" style={glass.inner}>
+                    <div className="flex justify-center mb-3">
+                      <QRCode ref={qrRef} value={generatedLink.url} size={200} />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleDownloadQR}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        style={{ background: 'var(--surface-strong)', border: '1px solid var(--border)', color: 'var(--ink-2)' }}
+                      >
+                        <Download className="size-3.5" />
+                        Download QR
+                      </button>
+                      <button
+                        onClick={handlePrintQR}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        style={{ background: 'var(--surface-strong)', border: '1px solid var(--border)', color: 'var(--ink-2)' }}
+                      >
+                        <Printer className="size-3.5" />
+                        Print QR
+                      </button>
+                    </div>
+                    <p className="mt-2 text-center text-[10px]" style={{ color: 'var(--subtle)' }}>
+                      Scan encodes the exact payment link — amount, recipient, and reference unchanged.
+                    </p>
                   </div>
                 )}
 
