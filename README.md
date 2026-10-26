@@ -6,10 +6,18 @@ ArcLink is a payment-link and checkout app for one-time, fixed-amount USDC payme
 
 A merchant creates a link or QR code. A customer opens it, checks the details, connects a wallet, approves the USDC allowance if needed, and confirms payment. The ArcLink smart contract forwards the exact payment to the merchant's payout address in the same transaction.
 
-- **Live app:** [usearclink.vercel.app](https://usearclink.vercel.app/)
-- **GitHub repository:** [Miracle-Alajemba/arclink](https://github.com/Miracle-Alajemba/arclink)
-- **ArcLink contract:** [0x973AA3397d218a12765388E2006E6603Bf83222a](https://explorer.arc.io/address/0x973AA3397d218a12765388E2006E6603Bf83222a)
-- **Contract deployment transaction:** [View on Arc Explorer](https://explorer.arc.io/tx/0xf86c8115e5132b06898bef14fd219163f1e6af95cb261b2cd77f2233f3d7ebeb)
+- **Live app:** [usearclink.vercel.app](https://usearclink.vercel.app/ )
+- **Arc Studio project:** [Open ArcLink in Arc Studio](https://studio.arc.io/app/ec1fdd68-0d5e-4a51-bd6f-494cb1526bdd )
+- **GitHub repository:** [Miracle-Alajemba/arclink](https://github.com/Miracle-Alajemba/arclink )
+- **ArcLink contract:** [0x973AA3397d218a12765388E2006E6603Bf83222a](https://explorer.arc.io/address/0x973AA3397d218a12765388E2006E6603Bf83222a )
+- **Contract deployment transaction:** [View on Arc Explorer](https://explorer.arc.io/tx/0xf86c8115e5132b06898bef14fd219163f1e6af95cb261b2cd77f2233f3d7ebeb )
+- **Example USDC payment transaction:** [View on Arc Explorer](https://explorer.arc.io/tx/0x984e68f9216b4b7bc5a194360051a32f8dd2f3b3a99f6bc16a5039f48b72caf2 )
+
+## Built with Arc Studio
+
+ArcLink was built and iterated on in Arc Studio, from the Solidity payment-forwarding contract and its Foundry tests to the web application and payment-request flow. The contract's current Foundry test suite reports **14 passing tests**.
+
+The project is deployed on Arc Mainnet and has an example successful USDC payment transaction. In that test, the payer and payout address were the same wallet; it demonstrates the payment flow but is not a test between two independent wallets.
 
 ## The problem ArcLink addresses
 
@@ -57,21 +65,25 @@ flowchart LR
   Merchant[Merchant] --> Dashboard
   Link --> Customer[Customer opens checkout]
   Customer --> Checkout
-  Checkout --> Wallet[Customer wallet<br/>reviews and signs]
+  Checkout --> Wallet[Customer wallet  
+reviews and signs]
 
   subgraph Web[ArcLink web app · React and Vite · hosted on Vercel]
-    Dashboard[Merchant dashboard<br/>Create link and QR]
+    Dashboard[Merchant dashboard  
+Create link and QR]
     Link[Shareable payment URL or QR]
     Checkout[Customer checkout page]
     Tracker[Merchant request tracker]
-    Local[(Merchant browser localStorage<br/>requests and private label)]
+    Local[(Merchant browser localStorage  
+requests and private label)]
     Dashboard --> Link
     Dashboard --> Local
     Local --> Tracker
   end
 
   subgraph Arc[Arc Mainnet · chain 5042]
-    Contract[ArcLink contract<br/>pay merchant, amount, token, ref]
+    Contract[ArcLink contract  
+pay merchant, amount, token, ref]
     USDC[USDC token contract]
     RPC[Arc RPC]
     Explorer[Arc Explorer]
@@ -108,12 +120,13 @@ The contract has no owner/admin role, protocol fee, or upgradeability mechanism.
 | Network | Arc Mainnet |
 | Chain ID | `5042` |
 | RPC endpoint | `https://rpc.mainnet.arc.io` |
-| Block explorer | [explorer.arc.io](https://explorer.arc.io) |
+| Block explorer | [explorer.arc.io](https://explorer.arc.io ) |
 | USDC token contract | `0x3600000000000000000000000000000000000000` |
 | ArcLink contract | `0x973AA3397d218a12765388E2006E6603Bf83222a` |
-| Deployment transaction | `0xf86c8115e5132b06898bef14fd219163f1e6af95cb261b2cd77f2233f3d7ebeb` |
+| Deployment transaction | [View on Arc Explorer](https://explorer.arc.io/tx/0xf86c8115e5132b06898bef14fd219163f1e6af95cb261b2cd77f2233f3d7ebeb ) |
+| Example USDC payment transaction | [View on Arc Explorer](https://explorer.arc.io/tx/0x984e68f9216b4b7bc5a194360051a32f8dd2f3b3a99f6bc16a5039f48b72caf2 ) |
 
-The USDC token address identifies the payment token on Arc. The ArcLink contract address identifies the app's payment-forwarding contract. The deployment transaction is the transaction that created that contract; it is **not** a customer payment transaction. A separate successful `pay` transaction is needed to demonstrate a live payment.
+The USDC token address identifies the payment token on Arc. The ArcLink contract address identifies the app's payment-forwarding contract. The deployment transaction created the contract; the separate example payment transaction shows a successful USDC payment through the app. For this test, the payer and payout address were the same wallet.
 
 ## Request history and privacy
 
@@ -125,64 +138,12 @@ The optional private label stays in the browser. The generated `ARCL-...` tracki
 
 ### Requirements
 
-- [Bun](https://bun.sh/) for the web application and scripts.
-- [Foundry](https://book.getfoundry.sh/) for Solidity compilation and contract tests.
+- [Bun](https://bun.sh/ ) for the web application and scripts.
+- [Foundry](https://book.getfoundry.sh/ ) for Solidity compilation and contract tests.
 
 ### Install and configure
 
 ```bash
 git clone https://github.com/Miracle-Alajemba/arclink.git
 cd arclink
-bun install --frozen-lockfile
-cp .env.example .env
-```
-
-Set the deployed contract address in `.env`:
-
-```dotenv
-VITE_ARCLINK_ADDRESS=0x973AA3397d218a12765388E2006E6603Bf83222a
-```
-
-`VITE_ARCLINK_ADDRESS` is public configuration, not a credential. Vite embeds variables beginning with `VITE_` in browser code. Never put private keys, recovery phrases, API secrets, or access tokens in `VITE_` variables. Do not commit `.env`.
-
-Start the development server:
-
-```bash
-bun run dev
-```
-
-### Run project checks
-
-```bash
-bun run check       # lint and TypeScript type check
-bunx vite build     # build the frontend for production
-forge test          # Solidity unit and fuzz tests
-```
-
-These commands verify code locally. They do not send a Mainnet payment. A Mainnet payment is a separate wallet action and must be reviewed before signing.
-
-## Project layout
-
-| Path | What it contains |
-| --- | --- |
-| `contracts/ArcLink.sol` | USDC payment-forwarding smart contract. |
-| `contracts/test/ArcLink.t.sol` | Foundry unit and fuzz tests for contract behavior. |
-| `src/chain-config.ts` | Active Arc Mainnet chain, RPC, USDC, and ArcLink contract settings. |
-| `src/components/LandingPage.tsx` | Product landing page and audience descriptions. |
-| `src/components/MerchantDashboard.tsx` | Form for creating payment links and QR codes. |
-| `src/components/CheckoutPage.tsx` | Customer wallet connection, USDC approval, and payment steps. |
-| `src/components/ReceiptPage.tsx` | Receipt with the transaction hash and explorer link. |
-| `src/components/PaymentRequests.tsx` | Merchant's local request tracker and on-chain event results. |
-| `src/utils/requests.ts` | Browser-local request storage and `PaymentMade` event scanner. |
-
-## Current limitations
-
-- A request is for one fixed amount paid to one payout address.
-- There are no recurring payments, payment splits, escrow, conditional payouts, or gas sponsorship.
-- Request history is browser-local and does not sync between devices.
-- Wallets may show a separate USDC approval confirmation before the payment confirmation.
-- A transaction is irreversible once confirmed on Mainnet. Verify all details in the wallet before signing.
-
-## Technology
-
-React, TypeScript, and Vite power the app. The smart contract is written in Solidity and uses OpenZeppelin `SafeERC20`. Foundry is used for contract builds and tests. wagmi, viem, and ConnectKit handle wallet and EVM interactions. QR codes help merchants share payment requests in person.
+bun install --frozen-lock
