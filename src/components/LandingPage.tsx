@@ -297,24 +297,6 @@ export default function LandingPage({ onCreateLink }: LandingPageProps) {
   return (
     <div className="min-h-dvh" style={{ background: 'var(--bg-gradient)', overflowX: 'hidden' }}>
 
-      {/* ── Network notice ───────────────────────────────────────────── */}
-      <div
-        className="w-full py-2 px-4 flex items-center justify-center gap-2 text-[11px] font-semibold"
-        style={{ background: gumdropBg, borderBottom: `1px solid rgba(74,159,232,0.18)` }}
-      >
-        <span
-          className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-bold"
-          style={{ background: gumdrop, color: '#fff', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase' }}
-        >
-          Arc Mainnet · 5042
-        </span>
-        {CONTRACT_PENDING ? (
-          <span style={{ color: licorice }}>Contract deployment pending — payment actions disabled until deployed.</span>
-        ) : (
-          <span style={{ color: licorice }}>USDC payments on Arc Mainnet.</span>
-        )}
-      </div>
-
       {/* ── Nav ──────────────────────────────────────────────────────── */}
       <nav
         className="sticky top-0 z-40 w-full px-5 py-3 flex items-center justify-between gap-4"
